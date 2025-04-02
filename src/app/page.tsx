@@ -1,6 +1,7 @@
 import SteamTableCalculator from "@/components/SteamTableCalculator";
 import SeawaterPropertyCalculator from "@/components/SeawaterPropertyCalculator";
 import PipeFlowCalculator from "@/components/PipeFlowCalculator";
+import PumpCurve from "@/components/PumpCurve";
 import { Toaster } from "react-hot-toast";
 
 export default function Home() {
@@ -10,6 +11,7 @@ export default function Home() {
         <SteamTableCalculator />
         <SeawaterPropertyCalculator />
         <PipeFlowCalculator />
+        <PumpCurve />
       </div>
       <Toaster position="top-center" />
     </main>
