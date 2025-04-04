@@ -209,65 +209,69 @@ export default function SteamTableCalculator() {
   };
 
   return (
-    <Card className="w-full max-w-md mx-auto">
+    <Card className="w-full max-w-4xl mx-auto">
       <div 
         className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50"
         onClick={() => setIsExpanded(!isExpanded)}
       >
-        <CardTitle className="text-lg">Steam Table Calculator</CardTitle>
+        <CardTitle className="text-lg sm:text-xl">Steam Table Calculator</CardTitle>
         {isExpanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
       </div>
       {isExpanded && (
         <>
           <CardHeader className="px-4 pt-0 text-center">
-            <CardDescription>
+            <CardDescription className="text-sm sm:text-base">
               Calculate steam properties based on temperature and pressure
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4 px-4 pb-4">
-            <div className="space-y-3">
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="temperature-check"
-                  checked={selectedInput === 'temperature'}
-                  onCheckedChange={handleTemperatureCheck}
+          <CardContent className="space-y-4 px-2 sm:px-4 pb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-3">
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="temperature-check"
+                    checked={selectedInput === 'temperature'}
+                    onCheckedChange={handleTemperatureCheck}
+                  />
+                  <Label htmlFor="temperature-check" className="text-sm sm:text-base">Temperature (°C)</Label>
+                </div>
+                <Input
+                  id="temperature"
+                  type="number"
+                  value={temperature}
+                  onChange={handleTemperatureChange}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Enter temperature"
+                  disabled={selectedInput === 'pressure'}
+                  className="text-sm sm:text-base"
                 />
-                <Label htmlFor="temperature-check">Temperature (°C)</Label>
               </div>
-              <Input
-                id="temperature"
-                type="number"
-                value={temperature}
-                onChange={handleTemperatureChange}
-                onKeyDown={handleKeyDown}
-                placeholder="Enter temperature"
-                disabled={selectedInput === 'pressure'}
-              />
-            </div>
 
-            <div className="space-y-3">
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="pressure-check"
-                  checked={selectedInput === 'pressure'}
-                  onCheckedChange={handlePressureCheck}
+              <div className="space-y-3">
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="pressure-check"
+                    checked={selectedInput === 'pressure'}
+                    onCheckedChange={handlePressureCheck}
+                  />
+                  <Label htmlFor="pressure-check" className="text-sm sm:text-base">Pressure (barg)</Label>
+                </div>
+                <Input
+                  id="pressure"
+                  type="number"
+                  value={pressure}
+                  onChange={handlePressureChange}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Enter pressure"
+                  disabled={selectedInput === 'temperature'}
+                  className="text-sm sm:text-base"
                 />
-                <Label htmlFor="pressure-check">Pressure (barg)</Label>
               </div>
-              <Input
-                id="pressure"
-                type="number"
-                value={pressure}
-                onChange={handlePressureChange}
-                onKeyDown={handleKeyDown}
-                placeholder="Enter pressure"
-                disabled={selectedInput === 'temperature'}
-              />
             </div>
 
             <Button 
               onClick={calculateSteamProperties}
-              className="w-full bg-gray-600 hover:bg-gray-800"
+              className="w-full bg-gray-600 hover:bg-gray-800 text-sm sm:text-base"
             >
               Calculate
             </Button>
@@ -277,30 +281,96 @@ export default function SteamTableCalculator() {
             {result !== null && (
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
-                  <div className="text-sm font-medium">Results</div>
+                  <div className="text-sm sm:text-base font-medium">Results</div>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={handleClose}
+                    className="text-xs sm:text-sm"
                   >
                     Close
                   </Button>
                 </div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between rounded-md border p-2">
-                    <div>
-                      Temperature: {result.temperature.toFixed(4)} °C
-                    </div>
-                    <div>
-                      Pressure: {result.pressure.toFixed(4)} barg
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div className="flex items-center justify-between rounded-md border p-2">
+                      <div className="text-sm sm:text-base">
+                        Temperature: {result.temperature.toFixed(4)} °C
+                      </div>
+                      <div className="text-sm sm:text-base">
+                        Pressure: {result.pressure.toFixed(4)} barg
+                      </div>
                     </div>
                   </div>
-                  {renderPropertySection('Saturated Liquid', result.saturatedLiquid)}
-                  {renderPropertySection('Saturated Steam', result.saturatedSteam)}
-                  {renderPropertySection('Evaporation', result.evaporation)}
+                  
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <div className="text-sm sm:text-base font-medium">Saturated Liquid</div>
+                      {Object.entries(result.saturatedLiquid).map(([key, value]) => (
+                        <div key={key} className="flex items-center justify-between rounded-md border py-1 px-4">
+                          <div className="text-sm sm:text-base">
+                            {key}: {typeof value === 'number' ? 
+                              (key === 'specificVolume' ? value.toFixed(6) : value.toFixed(4)) 
+                              : value} {getUnit(key)}
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 hover:bg-gray-200 active:bg-gray-300 transition-colors"
+                            onClick={() => copyToClipboard(value)}
+                          >
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="text-sm sm:text-base font-medium">Saturated Steam</div>
+                      {Object.entries(result.saturatedSteam).map(([key, value]) => (
+                        <div key={key} className="flex items-center justify-between rounded-md border py-1 px-4">
+                          <div className="text-sm sm:text-base">
+                            {key}: {typeof value === 'number' ? 
+                              (key === 'specificVolume' ? value.toFixed(6) : value.toFixed(4)) 
+                              : value} {getUnit(key)}
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 hover:bg-gray-200 active:bg-gray-300 transition-colors"
+                            onClick={() => copyToClipboard(value)}
+                          >
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="text-sm sm:text-base font-medium">Evaporation</div>
+                      {Object.entries(result.evaporation).map(([key, value]) => (
+                        <div key={key} className="flex items-center justify-between rounded-md border py-1 px-4">
+                          <div className="text-sm sm:text-base">
+                            {key}: {typeof value === 'number' ? 
+                              (key === 'specificVolume' ? value.toFixed(6) : value.toFixed(4)) 
+                              : value} {getUnit(key)}
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 hover:bg-gray-200 active:bg-gray-300 transition-colors"
+                            onClick={() => copyToClipboard(value)}
+                          >
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
                   <div className={`rounded-md border py-2 px-4 ${result.isSaturated ? 'bg-green-50' : 'bg-yellow-50'}`}>
                     <div className="flex items-center justify-between">
-                      <div className="text-sm font-medium">
+                      <div className="text-sm sm:text-base font-medium">
                         Status: {result.isSaturated ? 'Saturated' : 'Not Saturated'}
                       </div>
                       {result.isSaturated && <Check className="h-4 w-4 text-green-500" />}

@@ -22,10 +22,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 
 interface OperatingPoint {
   flow: number;
   head: number;
+  efficiency?: number;
 }
 
 interface TooltipPayload {
@@ -38,6 +41,11 @@ interface CustomTooltipProps {
   payload?: TooltipPayload[];
   label?: number;
   polynomialDegree: number;
+}
+
+interface SpeedCurve {
+  speed: number;
+  points: OperatingPoint[];
 }
 
 // 계수를 다항식 문자열로 변환하는 함수
@@ -56,6 +64,24 @@ function coefficientsToEquation(coefficients: number[]): string {
       if (i === 0) return term;
       return term.startsWith('-') ? term : `+${term}`;
     }).join(' ') + '  [m]';
+}
+
+// 계수를 다항식 문자열로 변환하는 함수 (효율 방정식용 추가)
+function coefficientsToEfficiencyEquation(coefficients: number[]): string {
+  if (coefficients.length === 0) return '';
+
+  return coefficients.map((coef, i) => {
+    if (Math.abs(coef) < 0.0001) return ''; // 매우 작은 계수는 무시
+
+    const value = coef.toFixed(4);
+    if (i === 0) return value;
+    if (i === 1) return `${value}x`;
+    return `${value}x^${i}`;
+  }).filter(term => term !== '')
+    .map((term, i) => {
+      if (i === 0) return term;
+      return term.startsWith('-') ? term : `+${term}`;
+    }).join(' ') + '  [%]';
 }
 
 // 다항식 계수 계산 함수 (최소제곱법)
@@ -160,24 +186,25 @@ const CustomTooltip = ({ active, payload, label, polynomialDegree }: CustomToolt
 
 export default function PumpCurve() {
   const [operatingPoints, setOperatingPoints] = useState<OperatingPoint[]>([]);
-  const [newPoint, setNewPoint] = useState<OperatingPoint>({ flow: 0, head: 0 });
+  const [newPoint, setNewPoint] = useState<OperatingPoint>({ flow: 0, head: 0, efficiency: 0 });
   const [isExpanded, setIsExpanded] = useState(false);
-  const [polynomialDegree, setPolynomialDegree] = useState<number>(2);
-  const [vfdSpeed, setVfdSpeed] = useState<number>(100); // VFD 속도 (%)
-  const [showSpeedCurves, setShowSpeedCurves] = useState<boolean>(true);
+  const [headPolynomialDegree, setHeadPolynomialDegree] = useState<number>(2);
+  const [efficiencyPolynomialDegree, setEfficiencyPolynomialDegree] = useState<number>(2);
+  const [editingCell, setEditingCell] = useState<{ index: number; field: keyof OperatingPoint } | null>(null);
+  const [editValue, setEditValue] = useState<string>('');
 
   // 예시 운전점 데이터
   const samplePoints: OperatingPoint[] = [
-    { flow: 0, head: 50 },
-    { flow: 100, head: 48 },
-    { flow: 200, head: 42 },
-    { flow: 300, head: 32 }
+    { flow: 0, head: 50, efficiency: 0 },
+    { flow: 100, head: 48, efficiency: 60 },
+    { flow: 200, head: 42, efficiency: 85 },
+    { flow: 300, head: 32, efficiency: 65 }
   ];
 
   const addPoint = (e: React.FormEvent) => {
     e.preventDefault();
     setOperatingPoints([...operatingPoints, newPoint].sort((a, b) => a.flow - b.flow));
-    setNewPoint({ flow: 0, head: 0 });
+    setNewPoint({ flow: 0, head: 0, efficiency: 0 });
     toast.success("운전점이 추가되었습니다.");
   };
 
@@ -193,70 +220,145 @@ export default function PumpCurve() {
     toast.success("운전점이 삭제되었습니다.");
   };
 
+  const startEditing = (index: number, field: keyof OperatingPoint, value: number) => {
+    setEditingCell({ index, field });
+    setEditValue(value.toString());
+  };
+
+  const handleEditChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setEditValue(e.target.value);
+  };
+
+  const handleEditKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      finishEditing();
+    } else if (e.key === 'Escape') {
+      setEditingCell(null);
+    }
+  };
+
+  const finishEditing = () => {
+    if (editingCell) {
+      const { index, field } = editingCell;
+      const value = parseFloat(editValue);
+      
+      if (!isNaN(value)) {
+        const newPoints = [...operatingPoints];
+        newPoints[index] = { ...newPoints[index], [field]: value };
+        setOperatingPoints(newPoints.sort((a, b) => a.flow - b.flow));
+        toast.success("운전점이 수정되었습니다.");
+      }
+      
+      setEditingCell(null);
+    }
+  };
+
   // 보간된 데이터 포인트와 추세선 생성
-  const { interpolatedPoints, trendlinePoints, equation, speedCurves } = useMemo(() => {
-    if (operatingPoints.length < 2) {
+  const { trendlinePoints, headEquation, efficiencyEquation, maxFlow, maxHead } = useMemo<{
+    trendlinePoints: OperatingPoint[];
+    headEquation: string;
+    efficiencyEquation: string;
+    maxFlow: number;
+    maxHead: number;
+  }>(() => {
+    if (operatingPoints.length < 1) {
       return { 
-        interpolatedPoints: operatingPoints, 
         trendlinePoints: [], 
-        equation: '',
-        speedCurves: []
+        headEquation: '',
+        efficiencyEquation: '',
+        maxFlow: 0,
+        maxHead: 0
       };
     }
 
-    // 보간된 포인트 계산
-    const interpolated: OperatingPoint[] = [];
-    for (let i = 0; i < operatingPoints.length - 1; i++) {
-      const current = operatingPoints[i];
-      const next = operatingPoints[i + 1];
-      const steps = 10;
-
-      for (let j = 0; j <= steps; j++) {
-        const ratio = j / steps;
-        const flow = current.flow + (next.flow - current.flow) * ratio;
-        const head = current.head + (next.head - current.head) * ratio;
-        interpolated.push({ flow, head });
-      }
-    }
-
-    // 추세선 계산
-    const coefficients = polyfit(operatingPoints, polynomialDegree);
+    // 양정 추세선 계산
+    const headCoefficients = polyfit(
+      operatingPoints.length === 1 
+        ? [...operatingPoints, { flow: 0, head: operatingPoints[0].head }] 
+        : operatingPoints, 
+      headPolynomialDegree
+    );
     const trendline: OperatingPoint[] = [];
     
-    if (coefficients.length > 0 && operatingPoints.length > 0) {
-      const minFlow = Math.min(...operatingPoints.map(p => p.flow));
-      const maxFlow = Math.max(...operatingPoints.map(p => p.flow));
+    // 효율 추세선 계산
+    const efficiencyPoints = operatingPoints.filter(p => p.efficiency !== undefined);
+    const efficiencyCoefficients = polyfit(
+      efficiencyPoints.length === 1
+        ? [...efficiencyPoints, { flow: 0, head: efficiencyPoints[0].efficiency || 0 }]
+        : efficiencyPoints.map(p => ({ flow: p.flow, head: p.efficiency || 0 })),
+      efficiencyPolynomialDegree
+    );
+
+    const minFlow = Math.min(...operatingPoints.map(p => p.flow));
+    const maxFlow = Math.max(...operatingPoints.map(p => p.flow));
+    const maxHead = Math.max(...operatingPoints.map(p => p.head));
+    const extendedMaxFlow = maxFlow * 1.2;
+
+    if (headCoefficients.length > 0 && operatingPoints.length > 0) {
       const steps = 100;
       
       for (let i = 0; i <= steps; i++) {
         const flow = minFlow + (maxFlow - minFlow) * (i / steps);
         let head = 0;
-        for (let j = 0; j < coefficients.length; j++) {
-          head += coefficients[j] * Math.pow(flow, j);
+        let efficiency = 0;
+        
+        // Calculate head
+        for (let j = 0; j < headCoefficients.length; j++) {
+          head += headCoefficients[j] * Math.pow(flow, j);
         }
-        trendline.push({ flow, head });
+        
+        // Calculate efficiency
+        if (efficiencyCoefficients.length > 0) {
+          for (let j = 0; j < efficiencyCoefficients.length; j++) {
+            efficiency += efficiencyCoefficients[j] * Math.pow(flow, j);
+          }
+        }
+        
+        trendline.push({ flow, head, efficiency });
       }
     }
 
-    // VFD 속도별 곡선 계산
-    const speeds = [0.8, 0.6, 0.4]; // 80%, 60%, 40% 속도
-    const speedCurves = speeds.map(speedRatio => ({
-      speed: speedRatio * 100,
-      points: trendline.map(point => applyAffinityLaws(point, speedRatio))
-    }));
+    // 양정 방정식 생성
+    const headEquation = headCoefficients.length > 0 
+      ? headCoefficients
+          .map((coef, i) => {
+            if (Math.abs(coef) < 0.0001) return ''; // 매우 작은 계수는 무시
+            const value = coef.toFixed(4);
+            if (i === 0) return value;
+            if (i === 1) return `${value}Q`;
+            return `${value}Q^${i}`;
+          })
+          .filter(term => term !== '')
+          .map((term, i) => i === 0 ? term : term.startsWith('-') ? term : `+${term}`)
+          .join(' ') + '  [m]'
+      : '';
 
-    const equation = coefficientsToEquation(coefficients);
+    // 효율 방정식 생성
+    const efficiencyEquation = efficiencyCoefficients.length > 0
+      ? efficiencyCoefficients
+          .map((coef, i) => {
+            if (Math.abs(coef) < 0.0001) return ''; // 매우 작은 계수는 무시
+            const value = coef.toFixed(4);
+            if (i === 0) return value;
+            if (i === 1) return `${value}Q`;
+            return `${value}Q^${i}`;
+          })
+          .filter(term => term !== '')
+          .map((term, i) => i === 0 ? term : term.startsWith('-') ? term : `+${term}`)
+          .join(' ') + '  [%]'
+      : '';
 
     return { 
-      interpolatedPoints: interpolated, 
-      trendlinePoints: trendline, 
-      equation,
-      speedCurves
+      trendlinePoints: trendline,
+      headEquation,
+      efficiencyEquation,
+      maxFlow: maxFlow * 1.2,
+      maxHead: maxHead * 1.2
     };
-  }, [operatingPoints, polynomialDegree]);
+  }, [operatingPoints, headPolynomialDegree, efficiencyPolynomialDegree]);
 
   return (
-    <Card className="w-full max-w-md mx-auto">
+    <Card className="w-full max-w-4xl mx-auto">
       <div 
         className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50"
         onClick={() => setIsExpanded(!isExpanded)}
@@ -271,7 +373,7 @@ export default function PumpCurve() {
               Calculate pump performance curve from operating points
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4 px-4 pb-4">
+          <CardContent className="space-y-4 px-2 sm:px-4 pb-4">
             <div className="flex justify-end mb-2">
               <Button
                 type="button"
@@ -283,49 +385,60 @@ export default function PumpCurve() {
               </Button>
             </div>
 
-            <form onSubmit={addPoint} className="mb-4 flex gap-4">
-              <div>
-                <label htmlFor="flow" className="block text-sm font-medium text-gray-700">유량 (m³/h)</label>
-                <input
+            <form onSubmit={addPoint} className="mb-4 grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="flow" className="text-sm sm:text-base">유량 (m³/h)</Label>
+                <Input
                   id="flow"
                   type="number"
                   value={newPoint.flow}
                   onChange={(e) => setNewPoint({ ...newPoint, flow: parseFloat(e.target.value) })}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  className="text-sm sm:text-base"
                   required
-                  aria-label="유량 입력"
-                  title="유량 입력"
                   placeholder="유량을 입력하세요"
                 />
               </div>
-              <div>
-                <label htmlFor="head" className="block text-sm font-medium text-gray-700">양정 (m)</label>
-                <input
+              <div className="space-y-2">
+                <Label htmlFor="head" className="text-sm sm:text-base">양정 (m)</Label>
+                <Input
                   id="head"
                   type="number"
                   value={newPoint.head}
                   onChange={(e) => setNewPoint({ ...newPoint, head: parseFloat(e.target.value) })}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  className="text-sm sm:text-base"
                   required
-                  aria-label="양정 입력"
-                  title="양정 입력"
                   placeholder="양정을 입력하세요"
                 />
               </div>
-              <Button
-                type="submit"
-                className="mt-6 px-4 py-2 bg-gray-600 hover:bg-gray-800 text-white"
-              >
-                포인트 추가
-              </Button>
+              <div className="space-y-2">
+                <Label htmlFor="efficiency" className="text-sm sm:text-base">효율 (%)</Label>
+                <Input
+                  id="efficiency"
+                  type="number"
+                  value={newPoint.efficiency}
+                  onChange={(e) => setNewPoint({ ...newPoint, efficiency: parseFloat(e.target.value) })}
+                  className="text-sm sm:text-base"
+                  placeholder="효율을 입력하세요"
+                  min="0"
+                  max="100"
+                />
+              </div>
+              <div className="space-y-2 flex items-end">
+                <Button
+                  type="submit"
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  운전점 추가
+                </Button>
+              </div>
             </form>
 
-            <div className="space-y-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
               <div className="flex items-center gap-2">
-                <label className="text-sm font-medium text-gray-700">다항식 차수:</label>
+                <label className="text-sm font-medium text-gray-700">양정 다항식 차수:</label>
                 <Select
-                  value={polynomialDegree.toString()}
-                  onValueChange={(value) => setPolynomialDegree(parseInt(value))}
+                  value={headPolynomialDegree.toString()}
+                  onValueChange={(value) => setHeadPolynomialDegree(parseInt(value))}
                 >
                   <SelectTrigger className="w-32">
                     <SelectValue placeholder="차수 선택" />
@@ -338,117 +451,245 @@ export default function PumpCurve() {
                   </SelectContent>
                 </Select>
               </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium text-gray-700">VFD 속도 곡선:</label>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowSpeedCurves(!showSpeedCurves)}
-                    className={showSpeedCurves ? "bg-blue-50" : ""}
-                  >
-                    {showSpeedCurves ? "숨기기" : "보이기"}
-                  </Button>
-                </div>
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-gray-700">효율 다항식 차수:</label>
+                <Select
+                  value={efficiencyPolynomialDegree.toString()}
+                  onValueChange={(value) => setEfficiencyPolynomialDegree(parseInt(value))}
+                >
+                  <SelectTrigger className="w-32">
+                    <SelectValue placeholder="차수 선택" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">1차 (선형)</SelectItem>
+                    <SelectItem value="2">2차 (포물선)</SelectItem>
+                    <SelectItem value="3">3차</SelectItem>
+                    <SelectItem value="4">4차</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
-            {equation && (
-              <div className="text-sm text-gray-600 bg-gray-50 p-2 rounded-md">
-                추세선 방정식: H = {equation}
+            {headEquation && (
+              <div className="space-y-2">
+                <div className="text-sm text-gray-600 bg-gray-50 p-2 rounded-md">
+                  양정 방정식 ({headPolynomialDegree}차): H = {headEquation}
+                </div>
+                {efficiencyEquation && (
+                  <div className="text-sm text-gray-600 bg-gray-50 p-2 rounded-md">
+                    효율 방정식 ({efficiencyPolynomialDegree}차): η = {efficiencyEquation}
+                  </div>
+                )}
               </div>
             )}
 
-            <div className="h-[400px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis
-                    dataKey="flow"
-                    label={{ value: '유량 (m³/h)', position: 'bottom', style: { fontSize: '10px' } }}
-                    type="number"
-                    domain={['dataMin', 'dataMax']}
-                    tick={{ fontSize: 10 }}
-                  />
-                  <YAxis
-                    label={{ value: '양정 (m)', angle: -90, position: 'left', style: { fontSize: '10px' } }}
-                    tick={{ fontSize: 10 }}
-                  />
-                  <Tooltip 
-                    content={<CustomTooltip polynomialDegree={polynomialDegree} />}
-                    cursor={{ stroke: '#666', strokeWidth: 1, strokeDasharray: '5 5' }}
-                  />
-                  <Legend 
-                    verticalAlign="top" 
-                    height={36}
-                    wrapperStyle={{ fontSize: '10px' }}
-                  />
-                  {showSpeedCurves && speedCurves.map((curve, index) => (
+            <div className="grid grid-cols-1 gap-4">
+              {/* Combined Performance and Efficiency Curve */}
+              <div className="h-[400px] sm:h-[500px]">
+                <div className="text-center text-sm font-medium mb-2">Performance & Efficiency Curve</div>
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart margin={{ top: 20, right: 30, bottom: 20, left: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="flow"
+                      label={{ value: '유량 (m³/h)', position: 'bottom', style: { fontSize: '10px' } }}
+                      type="number"
+                      domain={[0, maxFlow]}
+                      tick={{ fontSize: 10 }}
+                    />
+                    <YAxis
+                      yAxisId="head"
+                      label={{ value: '양정 (m)', angle: -90, position: 'left', style: { fontSize: '10px' } }}
+                      tick={{ fontSize: 10 }}
+                      domain={[0, maxHead]}
+                    />
+                    <YAxis
+                      yAxisId="efficiency"
+                      orientation="right"
+                      label={{ value: '효율 (%)', angle: 90, position: 'right', style: { fontSize: '10px' } }}
+                      domain={[0, 100]}
+                      tick={{ fontSize: 10 }}
+                    />
+                    <Tooltip 
+                      content={({ active, payload, label }) => {
+                        if (active && payload && payload.length) {
+                          // 추세선 데이터만 필터링
+                          const trendlineData = payload.filter(entry => 
+                            entry.name && typeof entry.name === 'string' && entry.name.includes('추세선')
+                          );
+
+                          return (
+                            <div className="bg-white/80 backdrop-blur-sm px-2 py-1 rounded-sm border border-gray-200 shadow-sm text-xs">
+                              <p>유량: {typeof label === 'number' ? label.toFixed(1) : label} m³/h</p>
+                              {trendlineData.map((entry: any, index) => {
+                                const name = typeof entry.name === 'string' ? entry.name.replace(' 추세선', '') : '';
+                                const unit = name.includes('양정') ? 'm' : '%';
+                                return (
+                                  <p key={index} style={{ color: entry.color }}>
+                                    {name}: {typeof entry.value === 'number' ? entry.value.toFixed(1) : entry.value} {unit}
+                                  </p>
+                                );
+                              })}
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                      cursor={{ stroke: '#666', strokeWidth: 1, strokeDasharray: '5 5' }}
+                    />
+                    <Legend 
+                      verticalAlign="top" 
+                      height={36}
+                      wrapperStyle={{ fontSize: '10px' }}
+                    />
+                    {/* Performance Curves */}
                     <Line
-                      key={curve.speed}
-                      data={curve.points}
+                      yAxisId="head"
+                      data={trendlinePoints}
                       type="monotone"
                       dataKey="head"
-                      name={`${curve.speed}% 속도`}
-                      stroke={`#dc2626`}
-                      strokeOpacity={0.3 + (0.2 * index)}
-                      strokeWidth={1}
+                      name={`양정 ${headPolynomialDegree}차 추세선`}
+                      stroke="#dc2626"
+                      strokeWidth={2}
                       strokeDasharray="5 5"
                       dot={false}
-                      activeDot={false}
+                      activeDot={{ r: 4, stroke: '#dc2626', strokeWidth: 2, fill: '#fff' }}
                     />
-                  ))}
-                  <Line
-                    data={interpolatedPoints}
-                    type="monotone"
-                    dataKey="head"
-                    name="보간 곡선"
-                    stroke="#2563eb"
-                    strokeWidth={2}
-                    dot={false}
-                    activeDot={false}
-                  />
-                  <Line
-                    data={trendlinePoints}
-                    type="monotone"
-                    dataKey="head"
-                    name={`${polynomialDegree}차 추세선 (100%)`}
-                    stroke="#dc2626"
-                    strokeWidth={2}
-                    strokeDasharray="5 5"
-                    dot={false}
-                    activeDot={{ r: 4, stroke: '#dc2626', strokeWidth: 2, fill: '#fff' }}
-                  />
-                  <Line
-                    data={operatingPoints}
-                    type="monotone"
-                    dataKey="head"
-                    name="운전점"
-                    stroke="#2563eb"
-                    strokeWidth={0}
-                    dot={{ stroke: '#2563eb', strokeWidth: 2, r: 4, fill: '#ffffff' }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
+                    <Line
+                      yAxisId="head"
+                      data={operatingPoints}
+                      type="monotone"
+                      dataKey="head"
+                      name="양정 운전점"
+                      stroke="#2563eb"
+                      strokeWidth={0}
+                      dot={{ stroke: '#2563eb', strokeWidth: 2, r: 4, fill: '#ffffff' }}
+                      isAnimationActive={false}
+                    />
+                    {/* Efficiency Curves */}
+                    <Line
+                      yAxisId="efficiency"
+                      data={trendlinePoints}
+                      type="monotone"
+                      dataKey="efficiency"
+                      name={`효율 ${efficiencyPolynomialDegree}차 추세선`}
+                      stroke="#15803d"
+                      strokeWidth={2}
+                      strokeDasharray="5 5"
+                      dot={false}
+                      activeDot={{ r: 4, stroke: '#15803d', strokeWidth: 2, fill: '#fff' }}
+                    />
+                    <Line
+                      yAxisId="efficiency"
+                      data={operatingPoints}
+                      type="monotone"
+                      dataKey="efficiency"
+                      name="효율 운전점"
+                      stroke="#16a34a"
+                      strokeWidth={0}
+                      dot={{ stroke: '#16a34a', strokeWidth: 2, r: 4, fill: '#ffffff' }}
+                      isAnimationActive={false}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
             </div>
 
             <div className="mt-4">
               <h3 className="text-lg font-semibold mb-2">입력된 운전점</h3>
-              <div className="grid grid-cols-1 gap-2">
-                {operatingPoints.map((point, index) => (
-                  <div key={index} className="flex items-center justify-between p-2 bg-gray-100 rounded-md">
-                    <span>유량: {point.flow} m³/h, 양정: {point.head} m</span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => deletePoint(index)}
-                      className="h-8 w-8 hover:bg-red-100 hover:text-red-600"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200 border">
+                  <thead>
+                    <tr className="bg-gray-50">
+                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-500 select-all">No.</th>
+                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-500 select-all">유량 (m³/h)</th>
+                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-500 select-all">양정 (m)</th>
+                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-500 select-all">효율 (%)</th>
+                      <th className="px-4 py-2 text-right text-sm font-medium text-gray-500">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {operatingPoints.map((point, index) => (
+                      <tr 
+                        key={index}
+                        className="hover:bg-gray-50"
+                      >
+                        <td className="px-4 py-2 text-sm text-gray-900 select-all">{index + 1}</td>
+                        <td 
+                          className="px-4 py-2 text-sm text-gray-900 cursor-pointer hover:bg-blue-50"
+                          onClick={() => startEditing(index, 'flow', point.flow)}
+                        >
+                          {editingCell?.index === index && editingCell?.field === 'flow' ? (
+                            <Input
+                              type="number"
+                              value={editValue}
+                              onChange={handleEditChange}
+                              onKeyDown={handleEditKeyDown}
+                              onBlur={finishEditing}
+                              className="w-full h-6 p-0 text-sm"
+                              autoFocus
+                            />
+                          ) : (
+                            <span className="select-all">{point.flow}</span>
+                          )}
+                        </td>
+                        <td 
+                          className="px-4 py-2 text-sm text-gray-900 cursor-pointer hover:bg-blue-50"
+                          onClick={() => startEditing(index, 'head', point.head)}
+                        >
+                          {editingCell?.index === index && editingCell?.field === 'head' ? (
+                            <Input
+                              type="number"
+                              value={editValue}
+                              onChange={handleEditChange}
+                              onKeyDown={handleEditKeyDown}
+                              onBlur={finishEditing}
+                              className="w-full h-6 p-0 text-sm"
+                              autoFocus
+                            />
+                          ) : (
+                            <span className="select-all">{point.head}</span>
+                          )}
+                        </td>
+                        <td 
+                          className="px-4 py-2 text-sm text-gray-900 cursor-pointer hover:bg-blue-50"
+                          onClick={() => startEditing(index, 'efficiency', point.efficiency || 0)}
+                        >
+                          {editingCell?.index === index && editingCell?.field === 'efficiency' ? (
+                            <Input
+                              type="number"
+                              value={editValue}
+                              onChange={handleEditChange}
+                              onKeyDown={handleEditKeyDown}
+                              onBlur={finishEditing}
+                              className="w-full h-6 p-0 text-sm"
+                              min="0"
+                              max="100"
+                              autoFocus
+                            />
+                          ) : (
+                            <span className="select-all">{point.efficiency}</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2 text-right">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => deletePoint(index)}
+                            className="h-8 w-8 hover:bg-red-100 hover:text-red-600"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {operatingPoints.length === 0 && (
+                  <div className="text-center py-4 text-sm text-gray-500">
+                    입력된 운전점이 없습니다.
                   </div>
-                ))}
+                )}
               </div>
             </div>
           </CardContent>

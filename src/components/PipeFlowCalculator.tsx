@@ -100,94 +100,99 @@ export default function PipeFlowCalculator() {
   };
 
   return (
-    <Card className="w-full max-w-md mx-auto">
+    <Card className="w-full max-w-4xl mx-auto">
       <div 
         className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50"
         onClick={() => setIsExpanded(!isExpanded)}
       >
-        <CardTitle className="text-lg">Pipe Flow Calculator</CardTitle>
+        <CardTitle className="text-lg sm:text-xl">Pipe Flow Calculator</CardTitle>
         {isExpanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
       </div>
       {isExpanded && (
         <>
           <CardHeader className="px-4 pt-0 text-center">
-            <CardDescription>
+            <CardDescription className="text-sm sm:text-base">
               Calculate pipe diameter, flowrate, or velocity
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4 px-4 pb-4">
-            <div className="space-y-3">
-              <div className="flex items-center space-x-2">
-                <Button
-                  variant={selectedInput === 'diameter' ? "default" : "outline"}
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => handleDiameterCheck(selectedInput !== 'diameter')}
-                >
-                  {selectedInput === 'diameter' && <X className="h-4 w-4" />}
-                </Button>
-                <Label>Diameter (mm)</Label>
+          <CardContent className="space-y-4 px-2 sm:px-4 pb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="space-y-3">
+                <div className="flex items-center space-x-2">
+                  <Button
+                    variant={selectedInput === 'diameter' ? "default" : "outline"}
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => handleDiameterCheck(selectedInput !== 'diameter')}
+                  >
+                    {selectedInput === 'diameter' && <X className="h-4 w-4" />}
+                  </Button>
+                  <Label className="text-sm sm:text-base">Diameter (mm)</Label>
+                </div>
+                <Input
+                  id="diameter"
+                  type="number"
+                  value={diameter}
+                  onChange={handleDiameterChange}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Enter diameter"
+                  disabled={selectedInput === 'diameter'}
+                  className="text-sm sm:text-base"
+                />
               </div>
-              <Input
-                id="diameter"
-                type="number"
-                value={diameter}
-                onChange={handleDiameterChange}
-                onKeyDown={handleKeyDown}
-                placeholder="Enter diameter"
-                disabled={selectedInput === 'diameter'}
-              />
-            </div>
 
-            <div className="space-y-3">
-              <div className="flex items-center space-x-2">
-                <Button
-                  variant={selectedInput === 'flowrate' ? "default" : "outline"}
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => handleFlowrateCheck(selectedInput !== 'flowrate')}
-                >
-                  {selectedInput === 'flowrate' && <X className="h-4 w-4" />}
-                </Button>
-                <Label>Flowrate (m³/h)</Label>
+              <div className="space-y-3">
+                <div className="flex items-center space-x-2">
+                  <Button
+                    variant={selectedInput === 'flowrate' ? "default" : "outline"}
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => handleFlowrateCheck(selectedInput !== 'flowrate')}
+                  >
+                    {selectedInput === 'flowrate' && <X className="h-4 w-4" />}
+                  </Button>
+                  <Label className="text-sm sm:text-base">Flowrate (m³/h)</Label>
+                </div>
+                <Input
+                  id="flowrate"
+                  type="number"
+                  value={flowrate}
+                  onChange={handleFlowrateChange}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Enter flowrate"
+                  disabled={selectedInput === 'flowrate'}
+                  className="text-sm sm:text-base"
+                />
               </div>
-              <Input
-                id="flowrate"
-                type="number"
-                value={flowrate}
-                onChange={handleFlowrateChange}
-                onKeyDown={handleKeyDown}
-                placeholder="Enter flowrate"
-                disabled={selectedInput === 'flowrate'}
-              />
-            </div>
 
-            <div className="space-y-3">
-              <div className="flex items-center space-x-2">
-                <Button
-                  variant={selectedInput === 'velocity' ? "default" : "outline"}
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => handleVelocityCheck(selectedInput !== 'velocity')}
-                >
-                  {selectedInput === 'velocity' && <X className="h-4 w-4" />}
-                </Button>
-                <Label>Velocity (m/s)</Label>
+              <div className="space-y-3">
+                <div className="flex items-center space-x-2">
+                  <Button
+                    variant={selectedInput === 'velocity' ? "default" : "outline"}
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => handleVelocityCheck(selectedInput !== 'velocity')}
+                  >
+                    {selectedInput === 'velocity' && <X className="h-4 w-4" />}
+                  </Button>
+                  <Label className="text-sm sm:text-base">Velocity (m/s)</Label>
+                </div>
+                <Input
+                  id="velocity"
+                  type="number"
+                  value={velocity}
+                  onChange={handleVelocityChange}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Enter velocity"
+                  disabled={selectedInput === 'velocity'}
+                  className="text-sm sm:text-base"
+                />
               </div>
-              <Input
-                id="velocity"
-                type="number"
-                value={velocity}
-                onChange={handleVelocityChange}
-                onKeyDown={handleKeyDown}
-                placeholder="Enter velocity"
-                disabled={selectedInput === 'velocity'}
-              />
             </div>
 
             <Button 
               onClick={calculatePipeFlow}
-              className="w-full bg-gray-600 hover:bg-gray-800"
+              className="w-full bg-gray-600 hover:bg-gray-800 text-sm sm:text-base"
             >
               Calculate
             </Button>
@@ -197,18 +202,19 @@ export default function PipeFlowCalculator() {
                 <Separator />
                 <div className="space-y-2">
                   <div className="flex justify-between items-center">
-                    <div className="text-sm font-medium">Results</div>
+                    <div className="text-sm sm:text-base font-medium">Results</div>
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={handleClose}
+                      className="text-xs sm:text-sm"
                     >
                       Close
                     </Button>
                   </div>
-                  <div className="space-y-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                     <div className="flex items-center justify-between rounded-md border p-2">
-                      <div>
+                      <div className="text-sm sm:text-base">
                         Diameter: {diameter.toFixed(2)} mm
                       </div>
                       <Button
@@ -221,7 +227,7 @@ export default function PipeFlowCalculator() {
                       </Button>
                     </div>
                     <div className="flex items-center justify-between rounded-md border p-2">
-                      <div>
+                      <div className="text-sm sm:text-base">
                         Flowrate: {flowrate.toFixed(2)} m³/h
                       </div>
                       <Button
@@ -234,7 +240,7 @@ export default function PipeFlowCalculator() {
                       </Button>
                     </div>
                     <div className="flex items-center justify-between rounded-md border p-2">
-                      <div>
+                      <div className="text-sm sm:text-base">
                         Velocity: {velocity.toFixed(2)} m/s
                       </div>
                       <Button

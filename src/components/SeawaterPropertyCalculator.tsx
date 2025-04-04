@@ -75,49 +75,53 @@ export default function SeawaterPropertyCalculator() {
   };
 
   return (
-    <Card className="w-full max-w-md mx-auto">
+    <Card className="w-full max-w-4xl mx-auto">
       <div 
         className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50"
         onClick={() => setIsExpanded(!isExpanded)}
       >
-        <CardTitle className="text-lg">Seawater Property Calculator</CardTitle>
+        <CardTitle className="text-lg sm:text-xl">Seawater Property Calculator</CardTitle>
         {isExpanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
       </div>
       {isExpanded && (
         <>
           <CardHeader className="px-4 pt-0 text-center">
-            <CardDescription>
+            <CardDescription className="text-sm sm:text-base">
               Calculate seawater properties based on temperature and salinity
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4 px-4 pb-4">
-            <div className="space-y-3">
-              <Label htmlFor="temperature">Temperature (°C)</Label>
-              <Input
-                id="temperature"
-                type="number"
-                value={temperature}
-                onChange={handleTemperatureChange}
-                onKeyDown={handleKeyDown}
-                placeholder="Enter temperature"
-              />
-            </div>
+          <CardContent className="space-y-4 px-2 sm:px-4 pb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-3">
+                <Label htmlFor="temperature" className="text-sm sm:text-base">Temperature (°C)</Label>
+                <Input
+                  id="temperature"
+                  type="number"
+                  value={temperature}
+                  onChange={handleTemperatureChange}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Enter temperature"
+                  className="text-sm sm:text-base"
+                />
+              </div>
 
-            <div className="space-y-3">
-              <Label htmlFor="salinity">Salinity (ppm)</Label>
-              <Input
-                id="salinity"
-                type="number"
-                value={salinity}
-                onChange={handleSalinityChange}
-                onKeyDown={handleKeyDown}
-                placeholder="Enter salinity"
-              />
+              <div className="space-y-3">
+                <Label htmlFor="salinity" className="text-sm sm:text-base">Salinity (ppm)</Label>
+                <Input
+                  id="salinity"
+                  type="number"
+                  value={salinity}
+                  onChange={handleSalinityChange}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Enter salinity"
+                  className="text-sm sm:text-base"
+                />
+              </div>
             </div>
 
             <Button 
               onClick={calculateProperties}
-              className="w-full bg-gray-600 hover:bg-gray-800"
+              className="w-full bg-gray-600 hover:bg-gray-800 text-sm sm:text-base"
             >
               Calculate
             </Button>
@@ -127,18 +131,19 @@ export default function SeawaterPropertyCalculator() {
                 <Separator />
                 <div className="space-y-2">
                   <div className="flex justify-between items-center">
-                    <div className="text-sm font-medium">Results</div>
+                    <div className="text-sm sm:text-base font-medium">Results</div>
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={handleClose}
+                      className="text-xs sm:text-sm"
                     >
                       Close
                     </Button>
                   </div>
-                  <div className="space-y-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                     <div className="flex items-center justify-between rounded-md border p-2">
-                      <div>
+                      <div className="text-sm sm:text-base">
                         Specific Gravity: {specificGravity?.toFixed(4)} kg/L
                       </div>
                       <Button
@@ -151,7 +156,7 @@ export default function SeawaterPropertyCalculator() {
                       </Button>
                     </div>
                     <div className="flex items-center justify-between rounded-md border p-2">
-                      <div>
+                      <div className="text-sm sm:text-base">
                         Viscosity: {viscosity?.toFixed(4)} mPa·s
                       </div>
                       <Button
@@ -164,7 +169,7 @@ export default function SeawaterPropertyCalculator() {
                       </Button>
                     </div>
                     <div className="flex items-center justify-between rounded-md border p-2">
-                      <div>
+                      <div className="text-sm sm:text-base">
                         Vapor Pressure: {vaporPressure?.toFixed(4)} bar
                       </div>
                       <Button
