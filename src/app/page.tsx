@@ -1,19 +1,21 @@
-import SteamTableCalculator from "@/components/SteamTableCalculator";
-import SeawaterPropertyCalculator from "@/components/SeawaterPropertyCalculator";
-import PipeFlowCalculator from "@/components/PipeFlowCalculator";
-import PumpCurve from "@/components/PumpCurve";
-import { Toaster } from "react-hot-toast";
+'use client';
+
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
 export default function Home() {
+  const router = useRouter();
+
+  useEffect(() => {
+    router.push('/pump-curve');
+  }, [router]);
+
   return (
-    <main className="min-h-screen p-4 space-y-4 bg-gray-200">
-      <div className="max-w-4xl mx-auto space-y-4">
-        <SteamTableCalculator />
-        <SeawaterPropertyCalculator />
-        <PipeFlowCalculator />
-        <PumpCurve />
+    <div className="flex items-center justify-center min-h-screen">
+      <div className="text-center">
+        <h1 className="text-2xl font-bold mb-4">Welcome to Pump Calculator</h1>
+        <p>Redirecting to Pump Curve Calculator...</p>
       </div>
-      <Toaster position="top-center" />
-    </main>
+    </div>
   );
 }

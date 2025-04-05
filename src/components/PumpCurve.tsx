@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   LineChart,
   Line,
@@ -14,7 +14,7 @@ import {
 } from 'recharts';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, ChevronUp, Trash2, Copy } from "lucide-react";
+import { ChevronDown, ChevronUp, Trash2, Copy, Download, FileJson } from "lucide-react";
 import { toast } from "react-hot-toast";
 import {
   Select,
@@ -25,6 +25,9 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import * as XLSX from 'xlsx';
+import fs from 'fs';
+import path from 'path';
 
 interface OperatingPoint {
   flow: number;
@@ -49,14 +52,29 @@ interface SpeedCurve {
   points: OperatingPoint[];
 }
 
+interface ComparisonCase {
+  caseName: string;
+  operatingPoints: OperatingPoint[];
+  equations: {
+    head: {
+      degree: number;
+      equation: string;
+    };
+    efficiency: {
+      degree: number;
+      equation: string;
+    };
+  };
+}
+
 // 계수를 다항식 문자열로 변환하는 함수
 function coefficientsToEquation(coefficients: number[]): string {
   if (coefficients.length === 0) return '';
 
   return coefficients.map((coef, i) => {
-    if (Math.abs(coef) < 0.0001) return ''; // 매우 작은 계수는 무시
+    if (Math.abs(coef) < 0.000000000001) return ''; // 매우 작은 계수는 무시
 
-    const value = coef.toFixed(4);
+    const value = coef.toFixed(12);
     if (i === 0) return value;
     if (i === 1) return `${value}x`;
     return `${value}x^${i}`;
@@ -64,17 +82,17 @@ function coefficientsToEquation(coefficients: number[]): string {
     .map((term, i) => {
       if (i === 0) return term;
       return term.startsWith('-') ? term : `+${term}`;
-    }).join(' ') + '  [m]';
+    }).join(' ');
 }
 
-// 계수를 다항식 문자열로 변환하는 함수 (효율 방정식용 추가)
+// 계수를 다항식 문자열로 변환하는 함수 (효율 방정식용)
 function coefficientsToEfficiencyEquation(coefficients: number[]): string {
   if (coefficients.length === 0) return '';
 
   return coefficients.map((coef, i) => {
-    if (Math.abs(coef) < 0.0001) return ''; // 매우 작은 계수는 무시
+    if (Math.abs(coef) < 0.000000000001) return ''; // 매우 작은 계수는 무시
 
-    const value = coef.toFixed(4);
+    const value = coef.toFixed(12);
     if (i === 0) return value;
     if (i === 1) return `${value}x`;
     return `${value}x^${i}`;
@@ -82,7 +100,7 @@ function coefficientsToEfficiencyEquation(coefficients: number[]): string {
     .map((term, i) => {
       if (i === 0) return term;
       return term.startsWith('-') ? term : `+${term}`;
-    }).join(' ') + '  [%]';
+    }).join(' ');
 }
 
 // 다항식 계수 계산 함수 (최소제곱법)
@@ -187,8 +205,9 @@ const CustomTooltip = ({ active, payload, label, polynomialDegree }: CustomToolt
 
 export default function PumpCurve() {
   const [operatingPoints, setOperatingPoints] = useState<OperatingPoint[]>([]);
+  const [comparisonCase, setComparisonCase] = useState<ComparisonCase | null>(null);
+  const [showComparison, setShowComparison] = useState<boolean>(false);
   const [newPoint, setNewPoint] = useState<OperatingPoint>({ flow: 0, head: 0, efficiency: 0 });
-  const [isExpanded, setIsExpanded] = useState(false);
   const [headPolynomialDegree, setHeadPolynomialDegree] = useState<number>(3);
   const [efficiencyPolynomialDegree, setEfficiencyPolynomialDegree] = useState<number>(3);
   const [editingCell, setEditingCell] = useState<{ index: number; field: keyof OperatingPoint } | null>(null);
@@ -201,6 +220,21 @@ export default function PumpCurve() {
   } | null>(null);
   const [isHovering, setIsHovering] = useState<number | null>(null);
   const [newPointIndex, setNewPointIndex] = useState<number | null>(null);
+  const [backgroundImage, setBackgroundImage] = useState<string | null>(null);
+  const [imageOpacity, setImageOpacity] = useState<number>(0.3);
+  const [imagePosition, setImagePosition] = useState({ x: 0, y: 0, width: 0, height: 0 });
+  const [maxFlowInput, setMaxFlowInput] = useState<number>(400);  // x축 최대값
+  const [maxHeadInput, setMaxHeadInput] = useState<number>(60);   // 양정 y축 최대값
+  const [maxEfficiencyInput, setMaxEfficiencyInput] = useState<number>(100);   // 효율 y축 최대값
+  const [minHeadInput] = useState<number>(0);   // 양정 y축 최소값 (고정)
+  const [minEfficiencyInput] = useState<number>(0);   // 효율 y축 최소값 (고정)
+  const [projectName, setProjectName] = useState<string>('');
+  const [pumpName, setPumpName] = useState<string>('');
+  const [maker, setMaker] = useState<string>('');
+  const [contractPhase, setContractPhase] = useState<string>('견적');
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const comparisonFileInputRef = useRef<HTMLInputElement>(null);
 
   // 예시 운전점 데이터
   const samplePoints: OperatingPoint[] = [
@@ -291,8 +325,8 @@ export default function PumpCurve() {
 
     // Convert position to value based on type
     if (type === 'head') {
-      const headRange = maxHead;
-      const newHead = Math.max(0, Math.min(maxHead, ((chartHeight - relativeY) / chartHeight) * headRange));
+      const headRange = maxHeadInput;
+      const newHead = Math.max(0, Math.min(maxHeadInput, ((chartHeight - relativeY) / chartHeight) * headRange));
       newPoints[index] = {
         ...newPoints[index],
         head: Number(newHead.toFixed(1))
@@ -320,20 +354,16 @@ export default function PumpCurve() {
   };
 
   // 보간된 데이터 포인트와 추세선 생성
-  const { trendlinePoints, headEquation, efficiencyEquation, maxFlow, maxHead } = useMemo<{
+  const { trendlinePoints, headEquation, efficiencyEquation } = useMemo<{
     trendlinePoints: OperatingPoint[];
     headEquation: string;
     efficiencyEquation: string;
-    maxFlow: number;
-    maxHead: number;
   }>(() => {
     if (operatingPoints.length < 1) {
       return { 
         trendlinePoints: [], 
         headEquation: '',
-        efficiencyEquation: '',
-        maxFlow: 0,
-        maxHead: 0
+        efficiencyEquation: ''
       };
     }
 
@@ -355,14 +385,12 @@ export default function PumpCurve() {
       efficiencyPolynomialDegree
     );
 
-      const minFlow = Math.min(...operatingPoints.map(p => p.flow));
-      const maxFlow = Math.max(...operatingPoints.map(p => p.flow));
-    const maxHead = Math.max(...operatingPoints.map(p => p.head));
-
     // 추세선 계산 로직 수정
     if (operatingPoints.length > 0) {
       const steps = 100;
-      const trendlineMaxFlow = maxFlow * 1.1; // 추세선은 110%까지만
+      const minFlow = 0;
+      const maxOperatingFlow = Math.max(...operatingPoints.map(p => p.flow));
+      const trendlineMaxFlow = maxOperatingFlow * 1.1; // 최대 유량의 110%까지만 표시
       
       for (let i = 0; i <= steps; i++) {
         const flow = minFlow + (trendlineMaxFlow - minFlow) * (i / steps);
@@ -388,37 +416,15 @@ export default function PumpCurve() {
     }
 
     // 양정 방정식 생성
-    const headEquation = headCoefficients.length > 0 
-      ? headCoefficients
-          .map((coef, i) => {
-            const value = coef.toFixed(12);
-            if (i === 0) return value;
-            if (i === 1) return `${value}Q`;
-            return `${value}Q^${i}`;
-          })
-          .map((term, i) => i === 0 ? term : term.startsWith('-') ? term : `+${term}`)
-          .join(' ') + '  [m]'
-      : '';
+    const headEquation = coefficientsToEquation(headCoefficients);
 
     // 효율 방정식 생성
-    const efficiencyEquation = efficiencyCoefficients.length > 0
-      ? efficiencyCoefficients
-          .map((coef, i) => {
-            const value = coef.toFixed(12);
-            if (i === 0) return value;
-            if (i === 1) return `${value}Q`;
-            return `${value}Q^${i}`;
-          })
-          .map((term, i) => i === 0 ? term : term.startsWith('-') ? term : `+${term}`)
-          .join(' ') + '  [%]'
-      : '';
+    const efficiencyEquation = coefficientsToEfficiencyEquation(efficiencyCoefficients);
 
     return { 
       trendlinePoints: trendline, 
       headEquation,
-      efficiencyEquation,
-      maxFlow: maxFlow * 1.2,  // 캔버스는 120%까지
-      maxHead: maxHead * 1.2
+      efficiencyEquation
     };
   }, [operatingPoints, headPolynomialDegree, efficiencyPolynomialDegree]);
 
@@ -442,11 +448,253 @@ export default function PumpCurve() {
     
     // 클립보드에 복사
     navigator.clipboard.writeText(tableText);
+    toast.success("운전점 데이터가 복사되었습니다.");
   };
 
+  const exportToExcel = () => {
+    // 데이터 준비
+    const headers = ['No.', '유량 (m³/h)', '양정 (m)', '효율 (%)'];
+    const data = operatingPoints.map((point, index) => [
+      index + 1,
+      point.flow,
+      point.head,
+      point.efficiency || ''
+    ]);
+
+    // 워크북 생성
+    const wb = XLSX.utils.book_new();
+    
+    // 데이터를 워크시트로 변환
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
+
+    // 열 너비 설정
+    const colWidths = [
+      { wch: 5 },  // No.
+      { wch: 12 }, // 유량
+      { wch: 10 }, // 양정
+      { wch: 10 }  // 효율
+    ];
+    ws['!cols'] = colWidths;
+
+    // 워크시트를 워크북에 추가
+    XLSX.utils.book_append_sheet(wb, ws, '운전점 데이터');
+
+    // 파일 저장
+    XLSX.writeFile(wb, '운전점_데이터.xlsx');
+  };
+
+  const exportToJson = async () => {
+    const caseData = {
+      caseName: caseName,
+      operatingPoints: operatingPoints,
+      maxValues: {
+        head: maxHeadInput,
+        efficiency: maxEfficiencyInput
+      },
+      equations: {
+        head: {
+          degree: headPolynomialDegree,
+          equation: headEquation
+        },
+        efficiency: {
+          degree: efficiencyPolynomialDegree,
+          equation: efficiencyEquation
+        }
+      }
+    };
+
+    try {
+      const response = await fetch('/api/saveCurveData', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(caseData),
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        toast.success(result.message || '케이스가 성공적으로 저장되었습니다.');
+      } else {
+        toast.error(result.message || 'JSON 파일 저장 중 오류가 발생했습니다.');
+      }
+    } catch (error) {
+      console.error('JSON 파일 저장 중 오류:', error);
+      toast.error('JSON 파일 저장 중 오류가 발생했습니다.');
+    }
+  };
+
+  // 이미지 크기와 위치를 계산하는 함수
+  const calculateImagePosition = (imageUrl: string) => {
+    const img = new Image();
+    img.onload = () => {
+      const chartContainer = document.querySelector('.recharts-wrapper');
+      const chartArea = document.querySelector('.recharts-cartesian-grid');
+      const yAxis = document.querySelector('.recharts-yAxis.yAxis');
+      if (!chartContainer || !chartArea || !yAxis) return;
+
+      const containerRect = chartContainer.getBoundingClientRect();
+      const chartAreaRect = chartArea.getBoundingClientRect();
+      const yAxisRect = yAxis.getBoundingClientRect();
+
+      // 차트 영역의 실제 크기와 위치 계산
+      const chartWidth = chartAreaRect.width;
+      const chartHeight = chartAreaRect.height;
+
+      // y축의 0점과 최대값 위치 계산
+      const yAxisZeroPoint = chartAreaRect.bottom - containerRect.top;
+      const yAxisMaxPoint = chartAreaRect.top - containerRect.top;
+      const actualChartHeight = yAxisZeroPoint - yAxisMaxPoint;
+
+      // x축의 시작점과 끝점 계산
+      const xAxisStart = chartAreaRect.left - containerRect.left;
+      const xAxisEnd = chartAreaRect.right - containerRect.left;
+      const actualChartWidth = xAxisEnd - xAxisStart;
+
+      // y축 방향으로 7% 아래로 이동
+      const yOffset = actualChartHeight * 0.07;
+
+      setImagePosition({
+        x: xAxisStart,
+        y: yAxisMaxPoint + yOffset, // 7% 아래로 이동
+        width: actualChartWidth,
+        height: actualChartHeight
+      });
+    };
+    img.src = imageUrl;
+  };
+
+  // 클립보드 붙여넣기 이벤트 핸들러
+  const handlePaste = (e: ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf('image') !== -1) {
+        const blob = items[i].getAsFile();
+        if (blob) {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const imageUrl = reader.result as string;
+            setBackgroundImage(imageUrl);
+            calculateImagePosition(imageUrl);
+          };
+          reader.readAsDataURL(blob);
+          break;
+        }
+      }
+    }
+  };
+
+  // 컴포넌트 마운트 시 이벤트 리스너 등록
+  React.useEffect(() => {
+    document.addEventListener('paste', handlePaste);
+    return () => {
+      document.removeEventListener('paste', handlePaste);
+    };
+  }, []);
+
+  // 차트 크기가 변경될 때 이미지 위치 재계산
+  React.useEffect(() => {
+    if (backgroundImage) {
+      // 차트가 완전히 렌더링된 후에 위치 계산
+      setTimeout(() => calculateImagePosition(backgroundImage), 500);
+    }
+  }, [backgroundImage, maxFlowInput, maxHeadInput, operatingPoints]);
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const jsonData = JSON.parse(event.target?.result as string);
+        
+        // 데이터 유효성 검사
+        if (!jsonData.caseName || !jsonData.operatingPoints || !jsonData.equations) {
+          toast.error('올바르지 않은 JSON 파일 형식입니다.');
+          return;
+        }
+
+        // 데이터 로드
+        setCaseName(jsonData.caseName);
+        setOperatingPoints(jsonData.operatingPoints);
+        
+        // 최대값 설정
+        if (jsonData.maxValues) {
+          setMaxHeadInput(jsonData.maxValues.head);
+          setMaxEfficiencyInput(jsonData.maxValues.efficiency);
+        }
+
+        // 다항식 차수 설정
+        if (jsonData.equations.head?.degree) {
+          setHeadPolynomialDegree(jsonData.equations.head.degree);
+        }
+        if (jsonData.equations.efficiency?.degree) {
+          setEfficiencyPolynomialDegree(jsonData.equations.efficiency.degree);
+        }
+
+        toast.success('케이스를 성공적으로 불러왔습니다.');
+      } catch (error) {
+        toast.error('JSON 파일을 읽는 중 오류가 발생했습니다.');
+      }
+    };
+    reader.readAsText(file);
+    
+    // 파일 입력 초기화 (같은 파일을 다시 선택할 수 있도록)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const loadComparisonCase = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const jsonData = JSON.parse(event.target?.result as string);
+        
+        // 데이터 유효성 검사
+        if (!jsonData.caseName || !jsonData.operatingPoints || !jsonData.equations) {
+          toast.error('올바르지 않은 JSON 파일 형식입니다.');
+          return;
+        }
+
+        setComparisonCase(jsonData);
+        setShowComparison(true);
+        toast.success('비교 케이스를 성공적으로 불러왔습니다.');
+      } catch (error) {
+        toast.error('JSON 파일을 읽는 중 오류가 발생했습니다.');
+      }
+    };
+    reader.readAsText(file);
+    
+    if (comparisonFileInputRef.current) {
+      comparisonFileInputRef.current.value = '';
+    }
+  };
+
+  // Case 명 자동 생성 함수
+  const generateCaseName = (date: Date = new Date()) => {
+    const dateStr = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}_${String(date.getHours()).padStart(2, '0')}${String(date.getMinutes()).padStart(2, '0')}`;
+    return `${projectName || 'PJT'}_${contractPhase}_${pumpName || 'PUMP'}_${maker || 'MAKER'}_${dateStr}`;
+  };
+
+  // Case 명 상태 초기화 및 업데이트
+  const [caseName, setCaseName] = useState<string>(() => generateCaseName());
+
+  // 프로젝트 정보가 변경될 때마다 Case 명 업데이트
+  useEffect(() => {
+    setCaseName(generateCaseName());
+  }, [projectName, pumpName, maker, contractPhase]);
+
   return (
-    <Card className="w-full max-w-4xl mx-auto">
-      <style>
+    <Card className="relative">
+      <style jsx global>
         {`
           @keyframes blink {
             0% { 
@@ -514,22 +762,125 @@ export default function PumpCurve() {
           }
         `}
       </style>
-      <div 
-        className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50"
-        onClick={() => setIsExpanded(!isExpanded)}
-      >
-        <CardTitle className="text-lg">Pump Performance Curve</CardTitle>
-        {isExpanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
-      </div>
-      {isExpanded && (
-        <>
-          <CardHeader className="px-4 pt-0 text-center">
-            <CardDescription>
+      <div className="p-4">
+        <CardTitle className="text-lg mb-4">Pump Performance Curve</CardTitle>
+        <CardDescription className="text-center mb-6">
               Calculate pump performance curve from operating points
             </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4 px-2 sm:px-4 pb-4">
-            <div className="flex justify-end mb-2">
+        <CardContent className="space-y-4 px-2 sm:px-4 pb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-gray-700 w-24">PJT 명:</label>
+                <Input
+                  type="text"
+                  value={projectName}
+                  onChange={(e) => setProjectName(e.target.value)}
+                  className="flex-1"
+                  placeholder="프로젝트명 입력"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-gray-700 w-24">Pump 명:</label>
+                <Input
+                  type="text"
+                  value={pumpName}
+                  onChange={(e) => setPumpName(e.target.value)}
+                  className="flex-1"
+                  placeholder="펌프명 입력"
+                />
+              </div>
+            </div>
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-gray-700 w-24">Maker:</label>
+                <Input
+                  type="text"
+                  value={maker}
+                  onChange={(e) => setMaker(e.target.value)}
+                  className="flex-1"
+                  placeholder="제조사 입력"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-gray-700">계약단계:</label>
+                <select
+                  value={contractPhase}
+                  onChange={(e) => setContractPhase(e.target.value)}
+                  className="flex-1 h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
+                  title="계약단계 선택"
+                  aria-label="계약단계 선택"
+                >
+                  <option value="견적">견적</option>
+                  <option value="수행">수행</option>
+                  <option value="기타">기타</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <div className="flex justify-between items-center mb-2">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-gray-700">Case 명:</label>
+                <Input
+                  type="text"
+                  value={caseName}
+                  onChange={(e) => setCaseName(e.target.value)}
+                  className="w-[500px]"
+                  placeholder="Case 명이 자동으로 생성됩니다"
+                />
+              </div>
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileUpload}
+                accept=".json"
+                className="hidden"
+                title="JSON 파일 업로드"
+                aria-label="JSON 파일 업로드"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => fileInputRef.current?.click()}
+                className="flex items-center gap-1"
+              >
+                <FileJson className="h-4 w-4" />
+                <span>Load JSON</span>
+              </Button>
+              <input
+                type="file"
+                ref={comparisonFileInputRef}
+                onChange={loadComparisonCase}
+                accept=".json"
+                className="hidden"
+                title="비교 케이스 JSON 파일 업로드"
+                aria-label="비교 케이스 JSON 파일 업로드"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => comparisonFileInputRef.current?.click()}
+                className="flex items-center gap-1"
+              >
+                <FileJson className="h-4 w-4" />
+                <span>Load Comparison</span>
+              </Button>
+              {comparisonCase && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setComparisonCase(null);
+                    setShowComparison(false);
+                  }}
+                  className="flex items-center gap-1"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  <span>Remove Comparison</span>
+                </Button>
+              )}
+            </div>
               <Button
                 type="button"
                 variant="outline"
@@ -540,212 +891,350 @@ export default function PumpCurve() {
               </Button>
             </div>
 
-            <form onSubmit={addPoint} className="mb-4 grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="flow" className="text-sm sm:text-base">유량 (m³/h)</Label>
-                <Input
+          <form onSubmit={addPoint} className="mb-4 grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="flow" className="text-sm sm:text-base">유량 (m³/h)</Label>
+              <Input
                   id="flow"
                   type="number"
                   value={newPoint.flow}
                   onChange={(e) => setNewPoint({ ...newPoint, flow: parseFloat(e.target.value) })}
-                  className="text-sm sm:text-base"
+                className="text-sm sm:text-base"
                   required
                   placeholder="유량을 입력하세요"
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="head" className="text-sm sm:text-base">양정 (m)</Label>
-                <Input
+            <div className="space-y-2">
+              <Label htmlFor="head" className="text-sm sm:text-base">양정 (m)</Label>
+              <Input
                   id="head"
                   type="number"
                   value={newPoint.head}
                   onChange={(e) => setNewPoint({ ...newPoint, head: parseFloat(e.target.value) })}
-                  className="text-sm sm:text-base"
+                className="text-sm sm:text-base"
                   required
                   placeholder="양정을 입력하세요"
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="efficiency" className="text-sm sm:text-base">효율 (%)</Label>
-                <Input
-                  id="efficiency"
-                  type="number"
-                  value={newPoint.efficiency}
-                  onChange={(e) => setNewPoint({ ...newPoint, efficiency: parseFloat(e.target.value) })}
-                  className="text-sm sm:text-base"
-                  placeholder="효율을 입력하세요"
-                  min="0"
-                  max="100"
-                />
-              </div>
-              <div className="space-y-2 flex items-end">
+            <div className="space-y-2">
+              <Label htmlFor="efficiency" className="text-sm sm:text-base">효율 (%)</Label>
+              <Input
+                id="efficiency"
+                type="number"
+                value={newPoint.efficiency}
+                onChange={(e) => setNewPoint({ ...newPoint, efficiency: parseFloat(e.target.value) })}
+                className="text-sm sm:text-base"
+                placeholder="효율을 입력하세요"
+                min="0"
+                max="100"
+              />
+            </div>
+            <div className="space-y-2 flex items-end">
               <Button
                 type="submit"
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white"
               >
-                  운전점 추가
+                운전점 추가
               </Button>
-              </div>
+            </div>
             </form>
 
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 flex-wrap">
               <div className="flex items-center gap-2">
-                <label className="text-sm font-medium text-gray-700">양정 다항식 차수:</label>
-                <Input
-                  type="number"
-                  value={headPolynomialDegree}
-                  onChange={(e) => {
-                    const value = parseInt(e.target.value);
-                    if (value >= 1 && value <= 4) {
-                      setHeadPolynomialDegree(value);
-                    }
-                  }}
-                  min={1}
-                  max={4}
-                  className="w-20 text-center"
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                <label className="text-sm font-medium text-gray-700">효율 다항식 차수:</label>
-                <Input
-                  type="number"
-                  value={efficiencyPolynomialDegree}
-                  onChange={(e) => {
-                    const value = parseInt(e.target.value);
-                    if (value >= 1 && value <= 4) {
-                      setEfficiencyPolynomialDegree(value);
-                    }
-                  }}
-                  min={1}
-                  max={4}
-                  className="w-20 text-center"
-                />
-              </div>
+              <label className="text-sm font-medium text-gray-700">양정 다항식 차수:</label>
+              <Input
+                type="number"
+                value={headPolynomialDegree}
+                onChange={(e) => {
+                  const value = parseInt(e.target.value);
+                  if (value >= 1 && value <= 4) {
+                    setHeadPolynomialDegree(value);
+                  }
+                }}
+                min={1}
+                max={4}
+                className="w-20 text-center"
+              />
             </div>
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-gray-700">효율 다항식 차수:</label>
+              <Input
+                type="number"
+                value={efficiencyPolynomialDegree}
+                onChange={(e) => {
+                  const value = parseInt(e.target.value);
+                  if (value >= 1 && value <= 4) {
+                    setEfficiencyPolynomialDegree(value);
+                  }
+                }}
+                min={1}
+                max={4}
+                className="w-20 text-center"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-gray-700">x축 최대값:</label>
+              <Input
+                type="number"
+                value={maxFlowInput}
+                onChange={(e) => {
+                  const value = parseInt(e.target.value);
+                  if (value > 0) {
+                    setMaxFlowInput(value);
+                  }
+                }}
+                min={1}
+                className="w-24 text-center"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-gray-700">양정 최대값:</label>
+              <Input
+                type="number"
+                value={maxHeadInput}
+                onChange={(e) => {
+                  const value = parseInt(e.target.value);
+                  if (value > 0) {
+                    setMaxHeadInput(value);
+                  }
+                }}
+                min={1}
+                className="w-24 text-center"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-gray-700">효율 최대값:</label>
+              <Input
+                type="number"
+                value={maxEfficiencyInput}
+                onChange={(e) => {
+                  const value = parseInt(e.target.value);
+                  if (value > 0 && value <= 100) {
+                    setMaxEfficiencyInput(value);
+                  }
+                }}
+                min={1}
+                max={100}
+                className="w-24 text-center"
+              />
+            </div>
+              </div>
 
-            {headEquation && (
+          {headEquation && (
               <div className="space-y-2">
-                <div className="text-sm text-gray-600 bg-gray-50 p-2 rounded-md">
+              <div className="flex items-center justify-between rounded-md bg-gray-50 p-2">
+                <div className="text-sm text-gray-600">
                   양정 방정식 ({headPolynomialDegree}차): H = {headEquation}
                 </div>
-                {efficiencyEquation && (
-              <div className="text-sm text-gray-600 bg-gray-50 p-2 rounded-md">
+                  <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 hover:bg-gray-200 active:bg-gray-300 transition-colors"
+                  onClick={() => {
+                    navigator.clipboard.writeText(`H = ${headEquation}`);
+                    toast.success("양정 방정식이 복사되었습니다.");
+                  }}
+                >
+                  <Copy className="h-4 w-4" />
+                  </Button>
+                </div>
+              {efficiencyEquation && (
+                <div className="flex items-center justify-between rounded-md bg-gray-50 p-2">
+                  <div className="text-sm text-gray-600">
                     효율 방정식 ({efficiencyPolynomialDegree}차): η = {efficiencyEquation}
-                  </div>
-                )}
               </div>
-            )}
-
-            <div className="grid grid-cols-1 gap-4">
-              {/* Combined Performance and Efficiency Curve */}
-              <div className="h-[400px] sm:h-[500px]">
-                <div className="text-center text-sm font-medium mb-2">Performance & Efficiency Curve</div>
-              <ResponsiveContainer width="100%" height="100%">
-                  <LineChart 
-                    margin={{ top: 20, right: 30, bottom: 20, left: 20 }}
-                    onDoubleClick={(data) => {
-                      if (data && data.activePayload && data.activePayload.length > 0) {
-                        const headData = data.activePayload.find(p => p.name?.includes('양정'));
-                        const efficiencyData = data.activePayload.find(p => p.name?.includes('효율'));
-                        
-                        if (headData && data.activeLabel !== undefined) {
-                          const newPoint: OperatingPoint = {
-                            flow: parseFloat(data.activeLabel.toString()),
-                            head: parseFloat(headData.value.toString()),
-                            efficiency: efficiencyData ? parseFloat(efficiencyData.value.toString()) : undefined
-                          };
-                          const newPoints = [...operatingPoints, newPoint].sort((a, b) => a.flow - b.flow);
-                          setOperatingPoints(newPoints);
-                          // 새로 추가된 점의 인덱스를 찾아서 설정
-                          const newIndex = newPoints.findIndex(p => p.flow === newPoint.flow && p.head === newPoint.head);
-                          setNewPointIndex(newIndex);
-                          // 1초 후에 깜빡임 효과 제거
-                          setTimeout(() => setNewPointIndex(null), 1000);
-                        }
-                      }
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 hover:bg-gray-200 active:bg-gray-300 transition-colors"
+                    onClick={() => {
+                      navigator.clipboard.writeText(`η = ${efficiencyEquation}`);
+                      toast.success("효율 방정식이 복사되었습니다.");
                     }}
                   >
-                    <defs>
-                      <marker
-                        id="arrowhead"
-                        markerWidth="10"
-                        markerHeight="7"
-                        refX="0"
-                        refY="3.5"
-                        orient="auto"
-                      >
-                        <polygon points="0 0, 10 3.5, 0 7" fill="#eab308" />
-                      </marker>
-                      <marker
-                        id="arrowhead-up"
-                        markerWidth="10"
-                        markerHeight="7"
-                        refX="0"
-                        refY="3.5"
-                        orient="auto-start-reverse"
-                      >
-                        <polygon points="0 0, 10 3.5, 0 7" fill="#eab308" />
-                      </marker>
-                    </defs>
+                    <Copy className="h-4 w-4" />
+                  </Button>
+            </div>
+              )}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 gap-4">
+            {/* Background Image Controls */}
+            <div className="flex items-center gap-4 flex-wrap">
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-gray-700">배경 이미지:</label>
+                <span className="text-sm text-gray-500">(Ctrl + V로 이미지 붙여넣기)</span>
+              </div>
+              {backgroundImage && (
+                <>
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm font-medium text-gray-700">투명도:</label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.1"
+                      value={imageOpacity}
+                      onChange={(e) => setImageOpacity(parseFloat(e.target.value))}
+                      className="w-24"
+                      title="이미지 투명도 조절"
+                      aria-label="이미지 투명도 조절"
+                    />
+                  </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                    onClick={() => setBackgroundImage(null)}
+                    className="text-sm"
+                >
+                    이미지 제거
+                </Button>
+                </>
+              )}
+          </div>
+
+            {/* Combined Performance and Efficiency Curve */}
+            <div className="h-[400px] sm:h-[500px] relative">
+              {backgroundImage && (
+                <div 
+                  className="absolute z-0"
+                  style={{
+                    left: `${imagePosition.x}px`,
+                    top: `${imagePosition.y}px`,
+                    width: `${imagePosition.width}px`,
+                    height: `${imagePosition.height}px`,
+                    backgroundImage: `url(${backgroundImage})`,
+                    backgroundSize: '100% 100%',
+                    backgroundPosition: 'left bottom',
+                    backgroundRepeat: 'no-repeat',
+                    opacity: imageOpacity,
+                    pointerEvents: 'none',
+                    transformOrigin: 'left bottom'
+                  }}
+                />
+              )}
+              <div className="text-center text-sm font-medium mb-2">Performance & Efficiency Curve</div>
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart 
+                  margin={{ top: 20, right: 30, bottom: 20, left: 20 }}
+                  onDoubleClick={(data) => {
+                    if (data && data.activePayload && data.activePayload.length > 0) {
+                      const headData = data.activePayload.find(p => p.name?.includes('양정'));
+                      const efficiencyData = data.activePayload.find(p => p.name?.includes('효율'));
+                      
+                      if (headData && data.activeLabel !== undefined) {
+                        const newPoint: OperatingPoint = {
+                          flow: parseFloat(data.activeLabel.toString()),
+                          head: parseFloat(headData.value.toString()),
+                          efficiency: efficiencyData ? parseFloat(efficiencyData.value.toString()) : undefined
+                        };
+                        const newPoints = [...operatingPoints, newPoint].sort((a, b) => a.flow - b.flow);
+                        setOperatingPoints(newPoints);
+                        // 새로 추가된 점의 인덱스를 찾아서 설정
+                        const newIndex = newPoints.findIndex(p => p.flow === newPoint.flow && p.head === newPoint.head);
+                        setNewPointIndex(newIndex);
+                        // 1초 후에 깜빡임 효과 제거
+                        setTimeout(() => setNewPointIndex(null), 1000);
+                      }
+                    }
+                  }}
+                >
+                  <defs>
+                    <marker
+                      id="arrowhead"
+                      markerWidth="10"
+                      markerHeight="7"
+                      refX="0"
+                      refY="3.5"
+                      orient="auto"
+                    >
+                      <polygon points="0 0, 10 3.5, 0 7" fill="#eab308" />
+                    </marker>
+                    <marker
+                      id="arrowhead-up"
+                      markerWidth="10"
+                      markerHeight="7"
+                      refX="0"
+                      refY="3.5"
+                      orient="auto-start-reverse"
+                    >
+                      <polygon points="0 0, 10 3.5, 0 7" fill="#eab308" />
+                    </marker>
+                  </defs>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis
                     dataKey="flow"
                     label={{ value: '유량 (m³/h)', position: 'bottom', style: { fontSize: '10px' } }}
                     type="number"
-                      domain={[0, maxFlow]}
+                    domain={[0, maxFlowInput]}
                     tick={{ fontSize: 10 }}
                   />
                   <YAxis
-                      yAxisId="head"
+                    yAxisId="head"
                     label={{ value: '양정 (m)', angle: -90, position: 'left', style: { fontSize: '10px' } }}
                     tick={{ fontSize: 10 }}
-                      domain={[0, maxHead]}
-                    />
-                    <YAxis
-                      yAxisId="efficiency"
-                      orientation="right"
-                      label={{ value: '효율 (%)', angle: 90, position: 'right', style: { fontSize: '10px' } }}
-                      domain={[0, 100]}
-                      tick={{ fontSize: 10 }}
-                      tickFormatter={(value) => value.toFixed(1)}
-                    />
-                    {operatingPoints.length >= 2 && (
-                      <ReferenceLine
-                        x={operatingPoints[1].flow}
-                        stroke="#666"
-                        strokeDasharray="3 3"
-                        label={{
-                          value: "min flow",
-                          position: "top",
-                          style: { fontSize: '10px' }
-                        }}
-                        yAxisId="head"
-                      />
-                    )}
-                  <Tooltip 
-                      content={({ active, payload, label }) => {
-                        if (active && payload && payload.length) {
-                          // 추세선 데이터만 필터링
-                          const trendlineData = payload.filter(entry => 
-                            entry.name && typeof entry.name === 'string' && entry.name.includes('추세선')
-                          );
-
-                          return (
-                            <div className="bg-white/80 backdrop-blur-sm px-2 py-1 rounded-sm border border-gray-200 shadow-sm text-xs">
-                              <p>유량: {typeof label === 'number' ? label.toFixed(1) : label} m³/h</p>
-                              {trendlineData.map((entry: any, index) => {
-                                const unit = entry.name.includes('효율') ? '%' : 'm';
-                                return (
-                                  <p key={index} style={{ color: entry.color }}>
-                                    {entry.name.replace(' 추세선', '')}: {typeof entry.value === 'number' ? entry.value.toFixed(1) : entry.value} {unit}
-                                  </p>
-                                );
-                              })}
-                            </div>
-                          );
-                        }
-                        return null;
+                    domain={[minHeadInput, maxHeadInput]}
+                    padding={{ top: 20, bottom: 0 }}
+                    allowDataOverflow={false}
+                    scale="linear"
+                    orientation="left"
+                    tickCount={6}
+                  />
+                  <YAxis
+                    yAxisId="efficiency"
+                    orientation="right"
+                    label={{ value: '효율 (%)', angle: 90, position: 'right', style: { fontSize: '10px' } }}
+                    domain={[minEfficiencyInput, maxEfficiencyInput]}
+                    tick={{ fontSize: 10 }}
+                    tickFormatter={(value) => value.toFixed(1)}
+                    allowDataOverflow={false}
+                    allowDecimals={true}
+                    scale="linear"
+                    padding={{ top: 20, bottom: 0 }}
+                    minTickGap={5}
+                    axisLine={{ strokeWidth: 1 }}
+                    tickLine={{ strokeWidth: 1 }}
+                    tickCount={6}
+                    width={45}
+                  />
+                  {operatingPoints.length >= 2 && (
+                    <ReferenceLine
+                      x={operatingPoints[1].flow}
+                      stroke="#666"
+                      strokeDasharray="3 3"
+                      label={{
+                        value: "min flow",
+                        position: "top",
+                        style: { fontSize: '10px' }
                       }}
+                      yAxisId="head"
+                    />
+                  )}
+                  <Tooltip 
+                    content={({ active, payload, label }) => {
+                      if (active && payload && payload.length) {
+                        // 추세선 데이터만 필터링
+                        const trendlineData = payload.filter(entry => 
+                          entry.name && typeof entry.name === 'string' && entry.name.includes('추세선')
+                        );
+
+                        return (
+                          <div className="bg-white/80 backdrop-blur-sm px-2 py-1 rounded-sm border border-gray-200 shadow-sm text-xs">
+                            <p>유량: {typeof label === 'number' ? label.toFixed(1) : label} m³/h</p>
+                            {trendlineData.map((entry: any, index) => {
+                              const unit = entry.name.includes('효율') ? '%' : 'm';
+                              return (
+                                <p key={index} style={{ color: entry.color }}>
+                                  {entry.name.replace(' 추세선', '')}: {typeof entry.value === 'number' ? entry.value.toFixed(1) : entry.value} {unit}
+                                </p>
+                              );
+                            })}
+                          </div>
+                        );
+                      }
+                      return null;
+                    }}
                     cursor={{ stroke: '#666', strokeWidth: 1, strokeDasharray: '5 5' }}
                   />
                   <Legend 
@@ -753,180 +1242,207 @@ export default function PumpCurve() {
                     height={36}
                     wrapperStyle={{ fontSize: '10px' }}
                   />
-                    {/* Performance Curves */}
+                  {/* Performance Curves */}
                     <Line
-                      yAxisId="head"
-                      data={trendlinePoints}
+                    yAxisId="head"
+                    data={trendlinePoints}
                       type="monotone"
                       dataKey="head"
-                      name={`양정 ${headPolynomialDegree}차 추세선`}
-                      stroke="#dc2626"
-                      strokeWidth={2}
+                    name={`양정 ${headPolynomialDegree}차 추세선`}
+                    stroke="#dc2626"
+                    strokeWidth={2}
                       strokeDasharray="5 5"
                       dot={false}
-                      activeDot={{ r: 4, stroke: '#dc2626', strokeWidth: 2, fill: '#fff' }}
+                    activeDot={{ r: 4, stroke: '#dc2626', strokeWidth: 2, fill: '#fff' }}
                     />
+                  {showComparison && comparisonCase && (
                   <Line
                       yAxisId="head"
-                      data={operatingPoints}
+                      data={comparisonCase.operatingPoints}
                     type="monotone"
                     dataKey="head"
-                      name="양정 운전점"
-                      stroke="#2563eb"
-                      strokeWidth={0}
-                      dot={(props: any) => {
-                        const { cx, cy, payload, index } = props;
-                        const isDragging = draggedPoint?.index === index && draggedPoint?.type === 'head';
-                        return (
-                          <>
-                            {(isDragging || isHovering === index || newPointIndex === index) && (
-                              <>
-                                <line
-                                  x1={cx}
-                                  y1="10%"
-                                  x2={cx}
-                                  y2="90%"
-                                  stroke={isDragging ? "#eab308" : "#666"}
-                                  strokeWidth={isDragging ? 2 : 1}
-                                  className={isDragging ? "vertical-arrow" : ""}
-                                  strokeDasharray={isDragging ? undefined : "5 5"}
-                                />
-                                {isDragging && (
-                                  <circle
-                                    cx={cx}
-                                    cy={cy}
-                                    r={8}
-                                    className={isDragging ? 'blinking-outer' : ''}
-                                    stroke="#dc2626"
-                                  />
-                                )}
-                                {newPointIndex === index && (
-                                  <circle
-                                    cx={cx}
-                                    cy={cy}
-                                    r={8}
-                                    className="blinking-new"
-                                    stroke="#dc2626"
-                                  />
-                                )}
-                              </>
-                            )}
-                            <circle
-                              cx={cx}
-                              cy={cy}
-                              r={4}
-                              fill="#ffffff"
-                    stroke="#2563eb"
+                      name={`비교 케이스 양정 (${comparisonCase.caseName})`}
+                      stroke="#9333ea"
                     strokeWidth={2}
-                              className={isDragging || newPointIndex === index ? 'blinking' : ''}
-                              style={{ 
-                                cursor: isHovering === index ? 'ns-resize' : 'default', 
-                                touchAction: 'none' 
-                              }}
-                              onMouseEnter={() => handleMouseEnter(index)}
-                              onMouseLeave={handleMouseLeave}
-                              onMouseDown={(e) => handleMouseDown(index, e, cx, 'head')}
-                              onDoubleClick={(e) => {
-                                e.stopPropagation();
-                                deletePoint(index);
-                              }}
-                            />
-                          </>
-                        );
-                      }}
-                      isAnimationActive={false}
-                    />
-                    {/* Efficiency Curves */}
+                      dot={{ r: 4, fill: '#ffffff', stroke: '#9333ea', strokeWidth: 2 }}
+                      activeDot={{ r: 4, stroke: '#9333ea', strokeWidth: 2, fill: '#fff' }}
+                  />
+                  )}
                   <Line
-                      yAxisId="efficiency"
-                    data={trendlinePoints}
+                    yAxisId="head"
+                    data={operatingPoints}
                     type="monotone"
-                      dataKey="efficiency"
-                      name={`효율 ${efficiencyPolynomialDegree}차 추세선`}
-                      stroke="#15803d"
+                    dataKey="head"
+                    name="양정 운전점"
+                    stroke="#2563eb"
+                    strokeWidth={0}
+                    dot={(props: any) => {
+                      const { cx, cy, payload, index } = props;
+                      const isDragging = draggedPoint?.index === index && draggedPoint?.type === 'head';
+                      return (
+                        <>
+                          {(isDragging || isHovering === index || newPointIndex === index) && (
+                            <>
+                              <line
+                                x1={cx}
+                                y1="10%"
+                                x2={cx}
+                                y2="90%"
+                                stroke={isDragging ? "#eab308" : "#666"}
+                                strokeWidth={isDragging ? 2 : 1}
+                                className={isDragging ? "vertical-arrow" : ""}
+                                strokeDasharray={isDragging ? undefined : "5 5"}
+                              />
+                              {isDragging && (
+                                <circle
+                                  cx={cx}
+                                  cy={cy}
+                                  r={8}
+                                  className={isDragging ? 'blinking-outer' : ''}
+                    stroke="#dc2626"
+                                />
+                              )}
+                              {newPointIndex === index && (
+                                <circle
+                                  cx={cx}
+                                  cy={cy}
+                                  r={8}
+                                  className="blinking-new"
+                                  stroke="#dc2626"
+                                />
+                              )}
+                            </>
+                          )}
+                          <circle
+                            cx={cx}
+                            cy={cy}
+                            r={4}
+                            fill="#ffffff"
+                  stroke="#2563eb"
+                  strokeWidth={2}
+                            className={isDragging || newPointIndex === index ? 'blinking' : ''}
+                            style={{ 
+                              cursor: isHovering === index ? 'ns-resize' : 'default', 
+                              touchAction: 'none' 
+                            }}
+                            onMouseEnter={() => handleMouseEnter(index)}
+                            onMouseLeave={handleMouseLeave}
+                            onMouseDown={(e) => handleMouseDown(index, e, cx, 'head')}
+                            onDoubleClick={(e) => {
+                              e.stopPropagation();
+                              deletePoint(index);
+                            }}
+                          />
+                        </>
+                      );
+                    }}
+                    isAnimationActive={false}
+                  />
+                  {/* Efficiency Curves */}
+                <Line
+                    yAxisId="efficiency"
+                  data={trendlinePoints}
+                  type="monotone"
+                    dataKey="efficiency"
+                    name={`효율 ${efficiencyPolynomialDegree}차 추세선`}
+                    stroke="#15803d"
                     strokeWidth={2}
                     strokeDasharray="5 5"
                     dot={false}
-                      activeDot={{ r: 4, stroke: '#15803d', strokeWidth: 2, fill: '#fff' }}
+                    activeDot={{ r: 4, stroke: '#15803d', strokeWidth: 2, fill: '#fff' }}
                   />
+                {showComparison && comparisonCase && (
                   <Line
-                      yAxisId="efficiency"
+                    yAxisId="efficiency"
+                    data={comparisonCase.operatingPoints}
+                    type="monotone"
+                    dataKey="efficiency"
+                    name={`비교 케이스 효율 (${comparisonCase.caseName})`}
+                    stroke="#7e22ce"
+                    strokeWidth={2}
+                    dot={{ r: 4, fill: '#ffffff', stroke: '#7e22ce', strokeWidth: 2 }}
+                    activeDot={{ r: 4, stroke: '#7e22ce', strokeWidth: 2, fill: '#fff' }}
+                  />
+                )}
+                <Line
+                    yAxisId="efficiency"
                     data={operatingPoints}
                     type="monotone"
-                      dataKey="efficiency"
-                      name="효율 운전점"
-                      stroke="#16a34a"
+                    dataKey="efficiency"
+                    name="효율 운전점"
+                    stroke="#16a34a"
                     strokeWidth={0}
-                      dot={(props: any) => {
-                        const { cx, cy, payload, index } = props;
-                        const isDragging = draggedPoint?.index === index && draggedPoint?.type === 'efficiency';
-                        return (
-                          <>
-                            {(isDragging || isHovering === index || newPointIndex === index) && (
-                              <>
-                                <line
-                                  x1={cx}
-                                  y1="10%"
-                                  x2={cx}
-                                  y2="90%"
-                                  stroke={isDragging ? "#eab308" : "#666"}
-                                  strokeWidth={isDragging ? 2 : 1}
-                                  className={isDragging ? "vertical-arrow" : ""}
-                                  strokeDasharray={isDragging ? undefined : "5 5"}
+                    dot={(props: any) => {
+                      const { cx, cy, payload, index } = props;
+                      const isDragging = draggedPoint?.index === index && draggedPoint?.type === 'efficiency';
+                      return (
+                        <>
+                          {(isDragging || isHovering === index || newPointIndex === index) && (
+                            <>
+                              <line
+                                x1={cx}
+                                y1="10%"
+                                x2={cx}
+                                y2="90%"
+                                stroke={isDragging ? "#eab308" : "#666"}
+                                strokeWidth={isDragging ? 2 : 1}
+                                className={isDragging ? "vertical-arrow" : ""}
+                                strokeDasharray={isDragging ? undefined : "5 5"}
+                              />
+                              {isDragging && (
+                                <circle
+                                  cx={cx}
+                                  cy={cy}
+                                  r={8}
+                                  className={isDragging ? 'blinking-outer' : ''}
+                                  stroke="#15803d"
                                 />
-                                {isDragging && (
-                                  <circle
-                                    cx={cx}
-                                    cy={cy}
-                                    r={8}
-                                    className={isDragging ? 'blinking-outer' : ''}
-                                    stroke="#15803d"
-                                  />
-                                )}
-                                {newPointIndex === index && (
-                                  <circle
-                                    cx={cx}
-                                    cy={cy}
-                                    r={8}
-                                    className="blinking-new"
-                                    stroke="#15803d"
-                                  />
-                                )}
-                              </>
-                            )}
-                            <circle
-                              cx={cx}
-                              cy={cy}
-                              r={4}
-                              fill="#ffffff"
-                              stroke="#16a34a"
-                              strokeWidth={2}
-                              className={isDragging || newPointIndex === index ? 'blinking' : ''}
-                              style={{ 
-                                cursor: isHovering === index ? 'ns-resize' : 'default', 
-                                touchAction: 'none' 
-                              }}
-                              onMouseEnter={() => handleMouseEnter(index)}
-                              onMouseLeave={handleMouseLeave}
-                              onMouseDown={(e) => handleMouseDown(index, e, cx, 'efficiency')}
-                              onDoubleClick={(e) => {
-                                e.stopPropagation();
-                                deletePoint(index);
-                              }}
-                            />
-                          </>
-                        );
-                      }}
-                      isAnimationActive={false}
+                              )}
+                              {newPointIndex === index && (
+                                <circle
+                                  cx={cx}
+                                  cy={cy}
+                                  r={8}
+                                  className="blinking-new"
+                                  stroke="#15803d"
+                                />
+                              )}
+                            </>
+                          )}
+                          <circle
+                            cx={cx}
+                            cy={cy}
+                            r={4}
+                            fill="#ffffff"
+                            stroke="#16a34a"
+                            strokeWidth={2}
+                            className={isDragging || newPointIndex === index ? 'blinking' : ''}
+                            style={{ 
+                              cursor: isHovering === index ? 'ns-resize' : 'default', 
+                              touchAction: 'none' 
+                            }}
+                            onMouseEnter={() => handleMouseEnter(index)}
+                            onMouseLeave={handleMouseLeave}
+                            onMouseDown={(e) => handleMouseDown(index, e, cx, 'efficiency')}
+                            onDoubleClick={(e) => {
+                              e.stopPropagation();
+                              deletePoint(index);
+                            }}
+                          />
+                        </>
+                      );
+                    }}
+                    isAnimationActive={false}
                   />
                 </LineChart>
               </ResponsiveContainer>
-              </div>
+            </div>
             </div>
 
             <div className="mt-4">
-              <div className="flex justify-between items-center mb-2">
-                <h3 className="text-lg font-semibold">입력된 운전점</h3>
+            <div className="flex justify-between items-center mb-2">
+              <h3 className="text-lg font-semibold">입력된 운전점</h3>
+              <div className="flex gap-2">
                 <Button
                   variant="outline"
                   size="sm"
@@ -936,82 +1452,101 @@ export default function PumpCurve() {
                   <Copy className="h-4 w-4" />
                   <span>Copy</span>
                 </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={exportToExcel}
+                  className="flex items-center gap-1"
+                >
+                  <Download className="h-4 w-4" />
+                  <span>Excel</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={exportToJson}
+                  className="flex items-center gap-1"
+                >
+                  <FileJson className="h-4 w-4" />
+                  <span>JSON</span>
+                </Button>
               </div>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200 border">
-                  <thead>
-                    <tr className="bg-gray-50">
-                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-500 select-all border-r">No.</th>
-                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-500 select-all border-r">유량 (m³/h)</th>
-                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-500 select-all border-r">양정 (m)</th>
-                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-500 select-all border-r">효율 (%)</th>
-                      <th className="px-4 py-2 text-right text-sm font-medium text-gray-500">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200 border">
+                <thead>
+                  <tr className="bg-gray-50">
+                    <th className="px-4 py-2 text-left text-sm font-medium text-gray-500 select-all border-r">No.</th>
+                    <th className="px-4 py-2 text-left text-sm font-medium text-gray-500 select-all border-r">유량 (m³/h)</th>
+                    <th className="px-4 py-2 text-left text-sm font-medium text-gray-500 select-all border-r">양정 (m)</th>
+                    <th className="px-4 py-2 text-left text-sm font-medium text-gray-500 select-all border-r">효율 (%)</th>
+                    <th className="px-4 py-2 text-right text-sm font-medium text-gray-500">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
                 {operatingPoints.map((point, index) => (
-                      <tr 
-                        key={index}
-                        className="hover:bg-gray-50"
+                    <tr 
+                      key={index}
+                      className="hover:bg-gray-50"
+                    >
+                      <td className="px-4 py-2 text-sm text-gray-900 select-all border-r">{index + 1}</td>
+                      <td 
+                        className="px-4 py-2 text-sm text-gray-900 cursor-pointer hover:bg-blue-50 border-r"
+                        onClick={() => startEditing(index, 'flow', point.flow)}
                       >
-                        <td className="px-4 py-2 text-sm text-gray-900 select-all border-r">{index + 1}</td>
-                        <td 
-                          className="px-4 py-2 text-sm text-gray-900 cursor-pointer hover:bg-blue-50 border-r"
-                          onClick={() => startEditing(index, 'flow', point.flow)}
-                        >
-                          {editingCell?.index === index && editingCell?.field === 'flow' ? (
-                            <Input
-                              type="number"
-                              value={editValue}
-                              onChange={handleEditChange}
-                              onKeyDown={handleEditKeyDown}
-                              onBlur={finishEditing}
-                              className="w-20 h-6 p-0 text-sm"
-                              autoFocus
-                            />
-                          ) : (
-                            <span className="select-all">{point.flow}</span>
-                          )}
-                        </td>
-                        <td 
-                          className="px-4 py-2 text-sm text-gray-900 cursor-pointer hover:bg-blue-50 border-r"
-                          onClick={() => startEditing(index, 'head', point.head)}
-                        >
-                          {editingCell?.index === index && editingCell?.field === 'head' ? (
-                            <Input
-                              type="number"
-                              value={editValue}
-                              onChange={handleEditChange}
-                              onKeyDown={handleEditKeyDown}
-                              onBlur={finishEditing}
-                              className="w-20 h-6 p-0 text-sm"
-                              autoFocus
-                            />
-                          ) : (
-                            <span className="select-all">{point.head}</span>
-                          )}
-                        </td>
-                        <td 
-                          className="px-4 py-2 text-sm text-gray-900 cursor-pointer hover:bg-blue-50 border-r"
-                          onClick={() => startEditing(index, 'efficiency', point.efficiency || 0)}
-                        >
-                          {editingCell?.index === index && editingCell?.field === 'efficiency' ? (
-                            <Input
-                              type="number"
-                              value={editValue}
-                              onChange={handleEditChange}
-                              onKeyDown={handleEditKeyDown}
-                              onBlur={finishEditing}
-                              className="w-20 h-6 p-0 text-sm"
-                              min="0"
-                              max="100"
-                              autoFocus
-                            />
-                          ) : (
-                            <span className="select-all">{point.efficiency}</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-2 text-right">
+                        {editingCell?.index === index && editingCell?.field === 'flow' ? (
+                          <Input
+                            type="number"
+                            value={editValue}
+                            onChange={handleEditChange}
+                            onKeyDown={handleEditKeyDown}
+                            onBlur={finishEditing}
+                            className="w-20 h-6 p-0 text-sm"
+                            autoFocus
+                          />
+                        ) : (
+                          <span className="select-all">{point.flow}</span>
+                        )}
+                      </td>
+                      <td 
+                        className="px-4 py-2 text-sm text-gray-900 cursor-pointer hover:bg-blue-50 border-r"
+                        onClick={() => startEditing(index, 'head', point.head)}
+                      >
+                        {editingCell?.index === index && editingCell?.field === 'head' ? (
+                          <Input
+                            type="number"
+                            value={editValue}
+                            onChange={handleEditChange}
+                            onKeyDown={handleEditKeyDown}
+                            onBlur={finishEditing}
+                            className="w-20 h-6 p-0 text-sm"
+                            autoFocus
+                          />
+                        ) : (
+                          <span className="select-all">{point.head}</span>
+                        )}
+                      </td>
+                      <td 
+                        className="px-4 py-2 text-sm text-gray-900 cursor-pointer hover:bg-blue-50 border-r"
+                        onClick={() => startEditing(index, 'efficiency', point.efficiency || 0)}
+                      >
+                        {editingCell?.index === index && editingCell?.field === 'efficiency' ? (
+                          <Input
+                            type="number"
+                            value={editValue}
+                            onChange={handleEditChange}
+                            onKeyDown={handleEditKeyDown}
+                            onBlur={finishEditing}
+                            className="w-20 h-6 p-0 text-sm"
+                            min="0"
+                            max="100"
+                            autoFocus
+                          />
+                        ) : (
+                          <span className="select-all">{point.efficiency}</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2 text-right">
                     <Button
                       variant="ghost"
                       size="icon"
@@ -1020,21 +1555,20 @@ export default function PumpCurve() {
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {operatingPoints.length === 0 && (
-                  <div className="text-center py-4 text-sm text-gray-500">
-                    입력된 운전점이 없습니다.
-                  </div>
-                )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {operatingPoints.length === 0 && (
+                <div className="text-center py-4 text-sm text-gray-500">
+                  입력된 운전점이 없습니다.
+                </div>
+              )}
               </div>
             </div>
           </CardContent>
-        </>
-      )}
+      </div>
     </Card>
   );
 } 

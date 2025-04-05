@@ -38,7 +38,6 @@ export default function SteamTableCalculator() {
   const [result, setResult] = useState<SteamProperty | null>(null);
   const [copied, setCopied] = useState(false);
   const [selectedInput, setSelectedInput] = useState<'temperature' | 'pressure' | null>(null);
-  const [isExpanded, setIsExpanded] = useState(false);
 
   const calculateSaturationPressure = (temp: number) => {
     // Antoine equation for water (valid from 0°C to 374°C)
@@ -210,178 +209,168 @@ export default function SteamTableCalculator() {
 
   return (
     <Card className="w-full max-w-4xl mx-auto">
-      <div 
-        className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50"
-        onClick={() => setIsExpanded(!isExpanded)}
-      >
-        <CardTitle className="text-lg sm:text-xl">Steam Table Calculator</CardTitle>
-        {isExpanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
-      </div>
-      {isExpanded && (
-        <>
-          <CardHeader className="px-4 pt-0 text-center">
-            <CardDescription className="text-sm sm:text-base">
-              Calculate steam properties based on temperature and pressure
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4 px-2 sm:px-4 pb-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-3">
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="temperature-check"
-                    checked={selectedInput === 'temperature'}
-                    onCheckedChange={handleTemperatureCheck}
-                  />
-                  <Label htmlFor="temperature-check" className="text-sm sm:text-base">Temperature (°C)</Label>
-                </div>
-                <Input
-                  id="temperature"
-                  type="number"
-                  value={temperature}
-                  onChange={handleTemperatureChange}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Enter temperature"
-                  disabled={selectedInput === 'pressure'}
-                  className="text-sm sm:text-base"
+      <div className="p-4">
+        <CardTitle className="text-lg sm:text-xl mb-4">Steam Table Calculator</CardTitle>
+        <CardDescription className="text-sm sm:text-base text-center mb-6">
+          Calculate steam properties based on temperature and pressure
+        </CardDescription>
+        <CardContent className="space-y-4 px-2 sm:px-4 pb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-3">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="temperature-check"
+                  checked={selectedInput === 'temperature'}
+                  onCheckedChange={handleTemperatureCheck}
                 />
+                <Label htmlFor="temperature-check" className="text-sm sm:text-base">Temperature (°C)</Label>
               </div>
-
-              <div className="space-y-3">
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="pressure-check"
-                    checked={selectedInput === 'pressure'}
-                    onCheckedChange={handlePressureCheck}
-                  />
-                  <Label htmlFor="pressure-check" className="text-sm sm:text-base">Pressure (barg)</Label>
-                </div>
-                <Input
-                  id="pressure"
-                  type="number"
-                  value={pressure}
-                  onChange={handlePressureChange}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Enter pressure"
-                  disabled={selectedInput === 'temperature'}
-                  className="text-sm sm:text-base"
-                />
-              </div>
+              <Input
+                id="temperature"
+                type="number"
+                value={temperature}
+                onChange={handleTemperatureChange}
+                onKeyDown={handleKeyDown}
+                placeholder="Enter temperature"
+                disabled={selectedInput === 'pressure'}
+                className="text-sm sm:text-base"
+              />
             </div>
 
-            <Button 
-              onClick={calculateSteamProperties}
-              className="w-full bg-gray-600 hover:bg-gray-800 text-sm sm:text-base"
-            >
-              Calculate
-            </Button>
+            <div className="space-y-3">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="pressure-check"
+                  checked={selectedInput === 'pressure'}
+                  onCheckedChange={handlePressureCheck}
+                />
+                <Label htmlFor="pressure-check" className="text-sm sm:text-base">Pressure (barg)</Label>
+              </div>
+              <Input
+                id="pressure"
+                type="number"
+                value={pressure}
+                onChange={handlePressureChange}
+                onKeyDown={handleKeyDown}
+                placeholder="Enter pressure"
+                disabled={selectedInput === 'temperature'}
+                className="text-sm sm:text-base"
+              />
+            </div>
+          </div>
 
-            <Separator />
+          <Button 
+            onClick={calculateSteamProperties}
+            className="w-full bg-gray-600 hover:bg-gray-800 text-sm sm:text-base"
+          >
+            Calculate
+          </Button>
 
-            {result !== null && (
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <div className="text-sm sm:text-base font-medium">Results</div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleClose}
-                    className="text-xs sm:text-sm"
-                  >
-                    Close
-                  </Button>
+          <Separator />
+
+          {result !== null && (
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <div className="text-sm sm:text-base font-medium">Results</div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleClose}
+                  className="text-xs sm:text-sm"
+                >
+                  Close
+                </Button>
+              </div>
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div className="flex items-center justify-between rounded-md border p-2">
+                    <div className="text-sm sm:text-base">
+                      Temperature: {result.temperature.toFixed(4)} °C
+                    </div>
+                    <div className="text-sm sm:text-base">
+                      Pressure: {result.pressure.toFixed(4)} barg
+                    </div>
+                  </div>
                 </div>
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <div className="flex items-center justify-between rounded-md border p-2">
-                      <div className="text-sm sm:text-base">
-                        Temperature: {result.temperature.toFixed(4)} °C
+                
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <div className="text-sm sm:text-base font-medium">Saturated Liquid</div>
+                    {Object.entries(result.saturatedLiquid).map(([key, value]) => (
+                      <div key={key} className="flex items-center justify-between rounded-md border py-1 px-4">
+                        <div className="text-sm sm:text-base">
+                          {key}: {typeof value === 'number' ? 
+                            (key === 'specificVolume' ? value.toFixed(6) : value.toFixed(4)) 
+                            : value} {getUnit(key)}
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 hover:bg-gray-200 active:bg-gray-300 transition-colors"
+                          onClick={() => copyToClipboard(value)}
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
                       </div>
-                      <div className="text-sm sm:text-base">
-                        Pressure: {result.pressure.toFixed(4)} barg
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <div className="text-sm sm:text-base font-medium">Saturated Liquid</div>
-                      {Object.entries(result.saturatedLiquid).map(([key, value]) => (
-                        <div key={key} className="flex items-center justify-between rounded-md border py-1 px-4">
-                          <div className="text-sm sm:text-base">
-                            {key}: {typeof value === 'number' ? 
-                              (key === 'specificVolume' ? value.toFixed(6) : value.toFixed(4)) 
-                              : value} {getUnit(key)}
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 hover:bg-gray-200 active:bg-gray-300 transition-colors"
-                            onClick={() => copyToClipboard(value)}
-                          >
-                            <Copy className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="text-sm sm:text-base font-medium">Saturated Steam</div>
-                      {Object.entries(result.saturatedSteam).map(([key, value]) => (
-                        <div key={key} className="flex items-center justify-between rounded-md border py-1 px-4">
-                          <div className="text-sm sm:text-base">
-                            {key}: {typeof value === 'number' ? 
-                              (key === 'specificVolume' ? value.toFixed(6) : value.toFixed(4)) 
-                              : value} {getUnit(key)}
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 hover:bg-gray-200 active:bg-gray-300 transition-colors"
-                            onClick={() => copyToClipboard(value)}
-                          >
-                            <Copy className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="text-sm sm:text-base font-medium">Evaporation</div>
-                      {Object.entries(result.evaporation).map(([key, value]) => (
-                        <div key={key} className="flex items-center justify-between rounded-md border py-1 px-4">
-                          <div className="text-sm sm:text-base">
-                            {key}: {typeof value === 'number' ? 
-                              (key === 'specificVolume' ? value.toFixed(6) : value.toFixed(4)) 
-                              : value} {getUnit(key)}
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 hover:bg-gray-200 active:bg-gray-300 transition-colors"
-                            onClick={() => copyToClipboard(value)}
-                          >
-                            <Copy className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
+                    ))}
                   </div>
 
-                  <div className={`rounded-md border py-2 px-4 ${result.isSaturated ? 'bg-green-50' : 'bg-yellow-50'}`}>
-                    <div className="flex items-center justify-between">
-                      <div className="text-sm sm:text-base font-medium">
-                        Status: {result.isSaturated ? 'Saturated' : 'Not Saturated'}
+                  <div className="space-y-2">
+                    <div className="text-sm sm:text-base font-medium">Saturated Steam</div>
+                    {Object.entries(result.saturatedSteam).map(([key, value]) => (
+                      <div key={key} className="flex items-center justify-between rounded-md border py-1 px-4">
+                        <div className="text-sm sm:text-base">
+                          {key}: {typeof value === 'number' ? 
+                            (key === 'specificVolume' ? value.toFixed(6) : value.toFixed(4)) 
+                            : value} {getUnit(key)}
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 hover:bg-gray-200 active:bg-gray-300 transition-colors"
+                          onClick={() => copyToClipboard(value)}
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
                       </div>
-                      {result.isSaturated && <Check className="h-4 w-4 text-green-500" />}
+                    ))}
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="text-sm sm:text-base font-medium">Evaporation</div>
+                    {Object.entries(result.evaporation).map(([key, value]) => (
+                      <div key={key} className="flex items-center justify-between rounded-md border py-1 px-4">
+                        <div className="text-sm sm:text-base">
+                          {key}: {typeof value === 'number' ? 
+                            (key === 'specificVolume' ? value.toFixed(6) : value.toFixed(4)) 
+                            : value} {getUnit(key)}
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 hover:bg-gray-200 active:bg-gray-300 transition-colors"
+                          onClick={() => copyToClipboard(value)}
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className={`rounded-md border py-2 px-4 ${result.isSaturated ? 'bg-green-50' : 'bg-yellow-50'}`}>
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm sm:text-base font-medium">
+                      Status: {result.isSaturated ? 'Saturated' : 'Not Saturated'}
                     </div>
+                    {result.isSaturated && <Check className="h-4 w-4 text-green-500" />}
                   </div>
                 </div>
               </div>
-            )}
-          </CardContent>
-        </>
-      )}
+            </div>
+          )}
+        </CardContent>
+      </div>
     </Card>
   );
 } 

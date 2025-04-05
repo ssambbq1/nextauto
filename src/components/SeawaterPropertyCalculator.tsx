@@ -16,7 +16,6 @@ export default function SeawaterPropertyCalculator() {
   const [viscosity, setViscosity] = useState<number | null>(null);
   const [vaporPressure, setVaporPressure] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(false);
   const [showResults, setShowResults] = useState(false);
 
   const calculateProperties = () => {
@@ -76,118 +75,108 @@ export default function SeawaterPropertyCalculator() {
 
   return (
     <Card className="w-full max-w-4xl mx-auto">
-      <div 
-        className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50"
-        onClick={() => setIsExpanded(!isExpanded)}
-      >
-        <CardTitle className="text-lg sm:text-xl">Seawater Property Calculator</CardTitle>
-        {isExpanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
-      </div>
-      {isExpanded && (
-        <>
-          <CardHeader className="px-4 pt-0 text-center">
-            <CardDescription className="text-sm sm:text-base">
-              Calculate seawater properties based on temperature and salinity
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4 px-2 sm:px-4 pb-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-3">
-                <Label htmlFor="temperature" className="text-sm sm:text-base">Temperature (°C)</Label>
-                <Input
-                  id="temperature"
-                  type="number"
-                  value={temperature}
-                  onChange={handleTemperatureChange}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Enter temperature"
-                  className="text-sm sm:text-base"
-                />
-              </div>
-
-              <div className="space-y-3">
-                <Label htmlFor="salinity" className="text-sm sm:text-base">Salinity (ppm)</Label>
-                <Input
-                  id="salinity"
-                  type="number"
-                  value={salinity}
-                  onChange={handleSalinityChange}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Enter salinity"
-                  className="text-sm sm:text-base"
-                />
-              </div>
+      <div className="p-4">
+        <CardTitle className="text-lg sm:text-xl mb-4">Seawater Property Calculator</CardTitle>
+        <CardDescription className="text-sm sm:text-base text-center mb-6">
+          Calculate seawater properties based on temperature and salinity
+        </CardDescription>
+        <CardContent className="space-y-4 px-2 sm:px-4 pb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-3">
+              <Label htmlFor="temperature" className="text-sm sm:text-base">Temperature (°C)</Label>
+              <Input
+                id="temperature"
+                type="number"
+                value={temperature}
+                onChange={handleTemperatureChange}
+                onKeyDown={handleKeyDown}
+                placeholder="Enter temperature"
+                className="text-sm sm:text-base"
+              />
             </div>
 
-            <Button 
-              onClick={calculateProperties}
-              className="w-full bg-gray-600 hover:bg-gray-800 text-sm sm:text-base"
-            >
-              Calculate
-            </Button>
+            <div className="space-y-3">
+              <Label htmlFor="salinity" className="text-sm sm:text-base">Salinity (ppm)</Label>
+              <Input
+                id="salinity"
+                type="number"
+                value={salinity}
+                onChange={handleSalinityChange}
+                onKeyDown={handleKeyDown}
+                placeholder="Enter salinity"
+                className="text-sm sm:text-base"
+              />
+            </div>
+          </div>
 
-            {showResults && (
-              <>
-                <Separator />
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <div className="text-sm sm:text-base font-medium">Results</div>
+          <Button 
+            onClick={calculateProperties}
+            className="w-full bg-gray-600 hover:bg-gray-800 text-sm sm:text-base"
+          >
+            Calculate
+          </Button>
+
+          {showResults && (
+            <>
+              <Separator />
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <div className="text-sm sm:text-base font-medium">Results</div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleClose}
+                    className="text-xs sm:text-sm"
+                  >
+                    Close
+                  </Button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                  <div className="flex items-center justify-between rounded-md border p-2">
+                    <div className="text-sm sm:text-base">
+                      Specific Gravity: {specificGravity?.toFixed(4)} kg/L
+                    </div>
                     <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleClose}
-                      className="text-xs sm:text-sm"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 hover:bg-gray-200 active:bg-gray-300 transition-colors"
+                      onClick={() => copyToClipboard(specificGravity)}
                     >
-                      Close
+                      <Copy className="h-4 w-4" />
                     </Button>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                    <div className="flex items-center justify-between rounded-md border p-2">
-                      <div className="text-sm sm:text-base">
-                        Specific Gravity: {specificGravity?.toFixed(4)} kg/L
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 hover:bg-gray-200 active:bg-gray-300 transition-colors"
-                        onClick={() => copyToClipboard(specificGravity)}
-                      >
-                        <Copy className="h-4 w-4" />
-                      </Button>
+                  <div className="flex items-center justify-between rounded-md border p-2">
+                    <div className="text-sm sm:text-base">
+                      Viscosity: {viscosity?.toFixed(4)} mPa·s
                     </div>
-                    <div className="flex items-center justify-between rounded-md border p-2">
-                      <div className="text-sm sm:text-base">
-                        Viscosity: {viscosity?.toFixed(4)} mPa·s
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 hover:bg-gray-200 active:bg-gray-300 transition-colors"
-                        onClick={() => copyToClipboard(viscosity)}
-                      >
-                        <Copy className="h-4 w-4" />
-                      </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 hover:bg-gray-200 active:bg-gray-300 transition-colors"
+                      onClick={() => copyToClipboard(viscosity)}
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div className="flex items-center justify-between rounded-md border p-2">
+                    <div className="text-sm sm:text-base">
+                      Vapor Pressure: {vaporPressure?.toFixed(4)} bar
                     </div>
-                    <div className="flex items-center justify-between rounded-md border p-2">
-                      <div className="text-sm sm:text-base">
-                        Vapor Pressure: {vaporPressure?.toFixed(4)} bar
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 hover:bg-gray-200 active:bg-gray-300 transition-colors"
-                        onClick={() => copyToClipboard(vaporPressure)}
-                      >
-                        <Copy className="h-4 w-4" />
-                      </Button>
-                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 hover:bg-gray-200 active:bg-gray-300 transition-colors"
+                      onClick={() => copyToClipboard(vaporPressure)}
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
                   </div>
                 </div>
-              </>
-            )}
-          </CardContent>
-        </>
-      )}
+              </div>
+            </>
+          )}
+        </CardContent>
+      </div>
     </Card>
   );
 } 

@@ -15,7 +15,6 @@ export default function PipeFlowCalculator() {
   const [flowrate, setFlowrate] = useState<number>(10); // m³/h
   const [velocity, setVelocity] = useState<number>(0.35); // m/s
   const [selectedInput, setSelectedInput] = useState<'diameter' | 'flowrate' | 'velocity' | null>(null);
-  const [isExpanded, setIsExpanded] = useState(false);
   const [showResults, setShowResults] = useState(false);
 
   const calculatePipeFlow = () => {
@@ -101,164 +100,154 @@ export default function PipeFlowCalculator() {
 
   return (
     <Card className="w-full max-w-4xl mx-auto">
-      <div 
-        className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50"
-        onClick={() => setIsExpanded(!isExpanded)}
-      >
-        <CardTitle className="text-lg sm:text-xl">Pipe Flow Calculator</CardTitle>
-        {isExpanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
-      </div>
-      {isExpanded && (
-        <>
-          <CardHeader className="px-4 pt-0 text-center">
-            <CardDescription className="text-sm sm:text-base">
-              Calculate pipe diameter, flowrate, or velocity
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4 px-2 sm:px-4 pb-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              <div className="space-y-3">
-                <div className="flex items-center space-x-2">
-                  <Button
-                    variant={selectedInput === 'diameter' ? "default" : "outline"}
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => handleDiameterCheck(selectedInput !== 'diameter')}
-                  >
-                    {selectedInput === 'diameter' && <X className="h-4 w-4" />}
-                  </Button>
-                  <Label className="text-sm sm:text-base">Diameter (mm)</Label>
-                </div>
-                <Input
-                  id="diameter"
-                  type="number"
-                  value={diameter}
-                  onChange={handleDiameterChange}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Enter diameter"
-                  disabled={selectedInput === 'diameter'}
-                  className="text-sm sm:text-base"
-                />
+      <div className="p-4">
+        <CardTitle className="text-lg sm:text-xl mb-4">Pipe Flow Calculator</CardTitle>
+        <CardDescription className="text-sm sm:text-base text-center mb-6">
+          Calculate pipe diameter, flowrate, or velocity
+        </CardDescription>
+        <CardContent className="space-y-4 px-2 sm:px-4 pb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="space-y-3">
+              <div className="flex items-center space-x-2">
+                <Button
+                  variant={selectedInput === 'diameter' ? "default" : "outline"}
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => handleDiameterCheck(selectedInput !== 'diameter')}
+                >
+                  {selectedInput === 'diameter' && <X className="h-4 w-4" />}
+                </Button>
+                <Label className="text-sm sm:text-base">Diameter (mm)</Label>
               </div>
-
-              <div className="space-y-3">
-                <div className="flex items-center space-x-2">
-                  <Button
-                    variant={selectedInput === 'flowrate' ? "default" : "outline"}
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => handleFlowrateCheck(selectedInput !== 'flowrate')}
-                  >
-                    {selectedInput === 'flowrate' && <X className="h-4 w-4" />}
-                  </Button>
-                  <Label className="text-sm sm:text-base">Flowrate (m³/h)</Label>
-                </div>
-                <Input
-                  id="flowrate"
-                  type="number"
-                  value={flowrate}
-                  onChange={handleFlowrateChange}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Enter flowrate"
-                  disabled={selectedInput === 'flowrate'}
-                  className="text-sm sm:text-base"
-                />
-              </div>
-
-              <div className="space-y-3">
-                <div className="flex items-center space-x-2">
-                  <Button
-                    variant={selectedInput === 'velocity' ? "default" : "outline"}
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => handleVelocityCheck(selectedInput !== 'velocity')}
-                  >
-                    {selectedInput === 'velocity' && <X className="h-4 w-4" />}
-                  </Button>
-                  <Label className="text-sm sm:text-base">Velocity (m/s)</Label>
-                </div>
-                <Input
-                  id="velocity"
-                  type="number"
-                  value={velocity}
-                  onChange={handleVelocityChange}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Enter velocity"
-                  disabled={selectedInput === 'velocity'}
-                  className="text-sm sm:text-base"
-                />
-              </div>
+              <Input
+                id="diameter"
+                type="number"
+                value={diameter}
+                onChange={handleDiameterChange}
+                onKeyDown={handleKeyDown}
+                placeholder="Enter diameter"
+                disabled={selectedInput === 'diameter'}
+                className="text-sm sm:text-base"
+              />
             </div>
 
-            <Button 
-              onClick={calculatePipeFlow}
-              className="w-full bg-gray-600 hover:bg-gray-800 text-sm sm:text-base"
-            >
-              Calculate
-            </Button>
+            <div className="space-y-3">
+              <div className="flex items-center space-x-2">
+                <Button
+                  variant={selectedInput === 'flowrate' ? "default" : "outline"}
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => handleFlowrateCheck(selectedInput !== 'flowrate')}
+                >
+                  {selectedInput === 'flowrate' && <X className="h-4 w-4" />}
+                </Button>
+                <Label className="text-sm sm:text-base">Flowrate (m³/h)</Label>
+              </div>
+              <Input
+                id="flowrate"
+                type="number"
+                value={flowrate}
+                onChange={handleFlowrateChange}
+                onKeyDown={handleKeyDown}
+                placeholder="Enter flowrate"
+                disabled={selectedInput === 'flowrate'}
+                className="text-sm sm:text-base"
+              />
+            </div>
 
-            {showResults && (
-              <>
-                <Separator />
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <div className="text-sm sm:text-base font-medium">Results</div>
+            <div className="space-y-3">
+              <div className="flex items-center space-x-2">
+                <Button
+                  variant={selectedInput === 'velocity' ? "default" : "outline"}
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => handleVelocityCheck(selectedInput !== 'velocity')}
+                >
+                  {selectedInput === 'velocity' && <X className="h-4 w-4" />}
+                </Button>
+                <Label className="text-sm sm:text-base">Velocity (m/s)</Label>
+              </div>
+              <Input
+                id="velocity"
+                type="number"
+                value={velocity}
+                onChange={handleVelocityChange}
+                onKeyDown={handleKeyDown}
+                placeholder="Enter velocity"
+                disabled={selectedInput === 'velocity'}
+                className="text-sm sm:text-base"
+              />
+            </div>
+          </div>
+
+          <Button 
+            onClick={calculatePipeFlow}
+            className="w-full bg-gray-600 hover:bg-gray-800 text-sm sm:text-base"
+          >
+            Calculate
+          </Button>
+
+          {showResults && (
+            <>
+              <Separator />
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <div className="text-sm sm:text-base font-medium">Results</div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleClose}
+                    className="text-xs sm:text-sm"
+                  >
+                    Close
+                  </Button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                  <div className="flex items-center justify-between rounded-md border p-2">
+                    <div className="text-sm sm:text-base">
+                      Diameter: {diameter.toFixed(2)} mm
+                    </div>
                     <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleClose}
-                      className="text-xs sm:text-sm"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 hover:bg-gray-200 active:bg-gray-300 transition-colors"
+                      onClick={() => copyToClipboard(diameter)}
                     >
-                      Close
+                      <Copy className="h-4 w-4" />
                     </Button>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                    <div className="flex items-center justify-between rounded-md border p-2">
-                      <div className="text-sm sm:text-base">
-                        Diameter: {diameter.toFixed(2)} mm
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 hover:bg-gray-200 active:bg-gray-300 transition-colors"
-                        onClick={() => copyToClipboard(diameter)}
-                      >
-                        <Copy className="h-4 w-4" />
-                      </Button>
+                  <div className="flex items-center justify-between rounded-md border p-2">
+                    <div className="text-sm sm:text-base">
+                      Flowrate: {flowrate.toFixed(2)} m³/h
                     </div>
-                    <div className="flex items-center justify-between rounded-md border p-2">
-                      <div className="text-sm sm:text-base">
-                        Flowrate: {flowrate.toFixed(2)} m³/h
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 hover:bg-gray-200 active:bg-gray-300 transition-colors"
-                        onClick={() => copyToClipboard(flowrate)}
-                      >
-                        <Copy className="h-4 w-4" />
-                      </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 hover:bg-gray-200 active:bg-gray-300 transition-colors"
+                      onClick={() => copyToClipboard(flowrate)}
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div className="flex items-center justify-between rounded-md border p-2">
+                    <div className="text-sm sm:text-base">
+                      Velocity: {velocity.toFixed(2)} m/s
                     </div>
-                    <div className="flex items-center justify-between rounded-md border p-2">
-                      <div className="text-sm sm:text-base">
-                        Velocity: {velocity.toFixed(2)} m/s
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 hover:bg-gray-200 active:bg-gray-300 transition-colors"
-                        onClick={() => copyToClipboard(velocity)}
-                      >
-                        <Copy className="h-4 w-4" />
-                      </Button>
-                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 hover:bg-gray-200 active:bg-gray-300 transition-colors"
+                      onClick={() => copyToClipboard(velocity)}
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
                   </div>
                 </div>
-              </>
-            )}
-          </CardContent>
-        </>
-      )}
+              </div>
+            </>
+          )}
+        </CardContent>
+      </div>
     </Card>
   );
 } 
