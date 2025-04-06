@@ -354,18 +354,23 @@ export default function PumpCurve() {
   };
 
   // 보간된 데이터 포인트와 추세선 생성
-  const { trendlinePoints, headEquation, efficiencyEquation } = useMemo<{
+  const { trendlinePoints, headEquation, efficiencyEquation, maxOperatingFlow } = useMemo<{
     trendlinePoints: OperatingPoint[];
     headEquation: string;
     efficiencyEquation: string;
+    maxOperatingFlow: number;
   }>(() => {
     if (operatingPoints.length < 1) {
       return { 
         trendlinePoints: [], 
         headEquation: '',
-        efficiencyEquation: ''
+        efficiencyEquation: '',
+        maxOperatingFlow: 0
       };
     }
+
+    // 최대 유량점 계산
+    const maxOperatingFlow = Math.max(...operatingPoints.map(p => p.flow));
 
     // 양정 추세선 계산
     const headCoefficients = polyfit(
@@ -389,8 +394,7 @@ export default function PumpCurve() {
     if (operatingPoints.length > 0) {
       const steps = 100;
       const minFlow = 0;
-      const maxOperatingFlow = Math.max(...operatingPoints.map(p => p.flow));
-      const trendlineMaxFlow = maxOperatingFlow * 1.1; // 최대 유량의 110%까지만 표시
+      const trendlineMaxFlow = maxOperatingFlow * 1.05; // 최대 유량의 105%까지만 표시
       
       for (let i = 0; i <= steps; i++) {
         const flow = minFlow + (trendlineMaxFlow - minFlow) * (i / steps);
@@ -424,7 +428,8 @@ export default function PumpCurve() {
     return { 
       trendlinePoints: trendline, 
       headEquation,
-      efficiencyEquation
+      efficiencyEquation,
+      maxOperatingFlow
     };
   }, [operatingPoints, headPolynomialDegree, efficiencyPolynomialDegree]);
 
@@ -978,9 +983,9 @@ export default function PumpCurve() {
                 type="number"
                 value={maxFlowInput}
                 onChange={(e) => {
-                  const value = parseInt(e.target.value);
-                  if (value > 0) {
-                    setMaxFlowInput(value);
+                  const newValue = parseInt(e.target.value);
+                  if (newValue > 0) {
+                    setMaxFlowInput(newValue);
                   }
                 }}
                 min={1}
@@ -988,14 +993,14 @@ export default function PumpCurve() {
               />
             </div>
             <div className="flex items-center gap-2">
-              <label className="text-sm font-medium text-gray-700">양정 최대값:</label>
+              <label className="text-sm font-medium text-gray-700">y축 최대값(양정):</label>
               <Input
                 type="number"
                 value={maxHeadInput}
                 onChange={(e) => {
-                  const value = parseInt(e.target.value);
-                  if (value > 0) {
-                    setMaxHeadInput(value);
+                  const newValue = parseInt(e.target.value);
+                  if (newValue > 0) {
+                    setMaxHeadInput(newValue);
                   }
                 }}
                 min={1}
@@ -1003,14 +1008,14 @@ export default function PumpCurve() {
               />
             </div>
             <div className="flex items-center gap-2">
-              <label className="text-sm font-medium text-gray-700">효율 최대값:</label>
+              <label className="text-sm font-medium text-gray-700">y축 최대값(효율):</label>
               <Input
                 type="number"
                 value={maxEfficiencyInput}
                 onChange={(e) => {
-                  const value = parseInt(e.target.value);
-                  if (value > 0 && value <= 100) {
-                    setMaxEfficiencyInput(value);
+                  const newValue = parseInt(e.target.value);
+                  if (newValue > 0 && newValue <= 100) {
+                    setMaxEfficiencyInput(newValue);
                   }
                 }}
                 min={1}
@@ -1245,28 +1250,40 @@ export default function PumpCurve() {
                   {/* Performance Curves */}
                     <Line
                     yAxisId="head"
-                    data={trendlinePoints}
+                    data={trendlinePoints.filter(point => point.flow <= maxOperatingFlow)}
                       type="monotone"
                       dataKey="head"
                     name={`양정 ${headPolynomialDegree}차 추세선`}
                     stroke="#dc2626"
                     strokeWidth={2}
-                      strokeDasharray="5 5"
                       dot={false}
                     activeDot={{ r: 4, stroke: '#dc2626', strokeWidth: 2, fill: '#fff' }}
                     />
-                  {showComparison && comparisonCase && (
                   <Line
-                      yAxisId="head"
-                      data={comparisonCase.operatingPoints}
+                    yAxisId="head"
+                    data={trendlinePoints.filter(point => point.flow >= maxOperatingFlow)}
                     type="monotone"
                     dataKey="head"
-                      name={`비교 케이스 양정 (${comparisonCase.caseName})`}
-                      stroke="#9333ea"
+                    name={`양정 ${headPolynomialDegree}차 추세선 (예측)`}
+                    stroke="#dc2626"
                     strokeWidth={2}
-                      dot={{ r: 4, fill: '#ffffff', stroke: '#9333ea', strokeWidth: 2 }}
-                      activeDot={{ r: 4, stroke: '#9333ea', strokeWidth: 2, fill: '#fff' }}
+                    strokeDasharray="5 5"
+                    dot={false}
+                    activeDot={{ r: 4, stroke: '#dc2626', strokeWidth: 2, fill: '#fff' }}
                   />
+                  {showComparison && comparisonCase && (
+                    <Line
+                      yAxisId="head"
+                      data={comparisonCase.operatingPoints}
+                      type="monotone"
+                      dataKey="head"
+                      name={`비교 케이스 양정 (${comparisonCase.caseName})`}
+                      stroke="#6b7280"
+                      strokeWidth={6}
+                      strokeOpacity={0.5}
+                      dot={{ r: 4, fill: '#ffffff', stroke: '#6b7280', strokeWidth: 2 }}
+                      activeDot={{ r: 4, stroke: '#6b7280', strokeWidth: 2, fill: '#fff' }}
+                    />
                   )}
                   <Line
                     yAxisId="head"
@@ -1291,7 +1308,6 @@ export default function PumpCurve() {
                                 stroke={isDragging ? "#eab308" : "#666"}
                                 strokeWidth={isDragging ? 2 : 1}
                                 className={isDragging ? "vertical-arrow" : ""}
-                                strokeDasharray={isDragging ? undefined : "5 5"}
                               />
                               {isDragging && (
                                 <circle
@@ -1341,10 +1357,21 @@ export default function PumpCurve() {
                   {/* Efficiency Curves */}
                 <Line
                     yAxisId="efficiency"
-                  data={trendlinePoints}
+                  data={trendlinePoints.filter(point => point.flow <= maxOperatingFlow)}
                   type="monotone"
                     dataKey="efficiency"
                     name={`효율 ${efficiencyPolynomialDegree}차 추세선`}
+                    stroke="#15803d"
+                    strokeWidth={2}
+                    dot={false}
+                    activeDot={{ r: 4, stroke: '#15803d', strokeWidth: 2, fill: '#fff' }}
+                  />
+                <Line
+                    yAxisId="efficiency"
+                    data={trendlinePoints.filter(point => point.flow >= maxOperatingFlow)}
+                    type="monotone"
+                    dataKey="efficiency"
+                    name={`효율 ${efficiencyPolynomialDegree}차 추세선 (예측)`}
                     stroke="#15803d"
                     strokeWidth={2}
                     strokeDasharray="5 5"
@@ -1358,10 +1385,11 @@ export default function PumpCurve() {
                     type="monotone"
                     dataKey="efficiency"
                     name={`비교 케이스 효율 (${comparisonCase.caseName})`}
-                    stroke="#7e22ce"
-                    strokeWidth={2}
-                    dot={{ r: 4, fill: '#ffffff', stroke: '#7e22ce', strokeWidth: 2 }}
-                    activeDot={{ r: 4, stroke: '#7e22ce', strokeWidth: 2, fill: '#fff' }}
+                    stroke="#4b5563"
+                    strokeWidth={6}
+                    strokeOpacity={0.5}
+                    dot={{ r: 4, fill: '#ffffff', stroke: '#4b5563', strokeWidth: 2 }}
+                    activeDot={{ r: 4, stroke: '#4b5563', strokeWidth: 2, fill: '#fff' }}
                   />
                 )}
                 <Line
@@ -1387,7 +1415,6 @@ export default function PumpCurve() {
                                 stroke={isDragging ? "#eab308" : "#666"}
                                 strokeWidth={isDragging ? 2 : 1}
                                 className={isDragging ? "vertical-arrow" : ""}
-                                strokeDasharray={isDragging ? undefined : "5 5"}
                               />
                               {isDragging && (
                                 <circle
@@ -1460,15 +1487,20 @@ export default function PumpCurve() {
                 >
                   <Download className="h-4 w-4" />
                   <span>Excel</span>
+                  
+                  
                 </Button>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={exportToJson}
-                  className="flex items-center gap-1"
+                  className="flex items-center gap-1 group relative"
                 >
                   <FileJson className="h-4 w-4" />
                   <span>JSON</span>
+                  <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-2 py-1 rounded text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">
+                    저장위치: 바탕화면
+                  </div>
                 </Button>
               </div>
             </div>
