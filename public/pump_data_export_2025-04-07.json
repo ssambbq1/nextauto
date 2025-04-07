@@ -1,0 +1,74 @@
+{
+  "caseInfo": {
+    "caseName": "ABCPJT_기타_BFP_2025-04-07",
+    "projectName": "ABCPJT",
+    "stage": "기타",
+    "date": "2025-04-07",
+    "pumpName": "BFP"
+  },
+  "maxValues": {
+    "head": 100,
+    "flow": 100,
+    "efficiency": 100
+  },
+  "equations": {
+    "head": {
+      "degree": 4,
+      "equation": "-0.000005233277x^4 + 0.000708676766x^3 + -0.032247800385x^2 + -0.016720539558x + 91.829075085735"
+    },
+    "efficiency": {
+      "degree": 4,
+      "equation": "0.000006213458x^4 + -0.001492744942x^3 + 0.078582123359x^2 + 0.811944476851x + 0.000000000002"
+    }
+  },
+  "points": {
+    "headPoints": [
+      {
+        "flow": "0.0",
+        "head": "91.8"
+      },
+      {
+        "flow": "19.0",
+        "head": "84.2"
+      },
+      {
+        "flow": "36.1",
+        "head": "73.4"
+      },
+      {
+        "flow": "62.8",
+        "head": "58.1"
+      },
+      {
+        "flow": "76.1",
+        "head": "40.2"
+      },
+      {
+        "flow": "84.6",
+        "head": "20.8"
+      }
+    ],
+    "efficiencyPoints": [
+      {
+        "flow": "0.0",
+        "efficiency": "0.0"
+      },
+      {
+        "flow": "21.3",
+        "efficiency": "39.8"
+      },
+      {
+        "flow": "53.6",
+        "efficiency": "90.7"
+      },
+      {
+        "flow": "73.2",
+        "efficiency": "73.4"
+      },
+      {
+        "flow": "85.2",
+        "efficiency": "43.8"
+      }
+    ]
+  }
+}

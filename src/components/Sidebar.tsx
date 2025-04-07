@@ -3,31 +3,36 @@
 import { useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, Activity, LineChart, Droplets, Thermometer, GitBranch } from "lucide-react";
+
+import { ChevronLeft, ChevronRight, Activity, LineChart, Droplets, Thermometer, GitBranch, Waves } from "lucide-react";
 import Link from 'next/link';
 
 const menuItems = [
   {
-    name: 'Pump Curve',
-    path: '/pump-curve',
-    icon: LineChart,
-    description: 'Calculate pump performance curve'
+    title: "Pump Curve",
+    href: "/pump-curve",
+    icon: Waves
   },
   {
-    name: 'Steam Table',
-    path: '/steam-table',
+    title: "Pump Curve New 2",
+    href: "/pump-curve-new-2",
+    icon: Waves,
+  },
+  {
+    title: "Steam Table",
+    href: "/steam-table",
     icon: Thermometer,
     description: 'Calculate steam properties'
   },
   {
-    name: 'Seawater Property',
-    path: '/seawater-property',
+    title: "Seawater Property",
+    href: "/seawater-property",
     icon: Droplets,
     description: 'Calculate seawater properties'
   },
   {
-    name: 'Pipe Flow',
-    path: '/pipe-flow',
+    title: "Pipe Flow",
+    href: "/pipe-flow",
     icon: GitBranch,
     description: 'Calculate pipe flow characteristics'
   }
@@ -64,12 +69,12 @@ export default function Sidebar() {
         <nav className="space-y-2">
           {menuItems.map((item) => {
             const Icon = item.icon;
-            const isActive = pathname === item.path;
+            const isActive = pathname === item.href;
 
             return (
               <Link
-                key={item.path}
-                href={item.path}
+                key={item.href}
+                href={item.href}
                 className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors
                   ${isActive 
                     ? 'bg-blue-100 text-blue-700' 
@@ -80,7 +85,7 @@ export default function Sidebar() {
               >
                 <Icon className="h-5 w-5 flex-shrink-0" />
                 {isExpanded && (
-                  <span className="text-sm">{item.name}</span>
+                  <span className="text-sm">{item.title}</span>
                 )}
               </Link>
             );

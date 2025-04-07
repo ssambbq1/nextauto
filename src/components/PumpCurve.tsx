@@ -1264,7 +1264,7 @@ export default function PumpCurve() {
                     data={trendlinePoints.filter(point => point.flow >= maxOperatingFlow)}
                     type="monotone"
                     dataKey="head"
-                    name={`양정 ${headPolynomialDegree}차 추세선 (예측)`}
+                    // name={`양정 ${headPolynomialDegree}차 추세선 (예측)`}
                     stroke="#dc2626"
                     strokeWidth={2}
                     strokeDasharray="5 5"
@@ -1272,11 +1272,11 @@ export default function PumpCurve() {
                     activeDot={{ r: 4, stroke: '#dc2626', strokeWidth: 2, fill: '#fff' }}
                   />
                   {showComparison && comparisonCase && (
-                    <Line
+                  <Line
                       yAxisId="head"
                       data={comparisonCase.operatingPoints}
-                      type="monotone"
-                      dataKey="head"
+                    type="monotone"
+                    dataKey="head"
                       name={`비교 케이스 양정 (${comparisonCase.caseName})`}
                       stroke="#6b7280"
                       strokeWidth={6}
@@ -1371,7 +1371,7 @@ export default function PumpCurve() {
                     data={trendlinePoints.filter(point => point.flow >= maxOperatingFlow)}
                     type="monotone"
                     dataKey="efficiency"
-                    name={`효율 ${efficiencyPolynomialDegree}차 추세선 (예측)`}
+                    // name={`효율 ${efficiencyPolynomialDegree}차 추세선 (예측)`}
                     stroke="#15803d"
                     strokeWidth={2}
                     strokeDasharray="5 5"
